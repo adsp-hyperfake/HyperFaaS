@@ -68,6 +68,11 @@ func (su *StatusUpdate) Response() *StatusUpdate {
 	return su
 }
 
+func (su *StatusUpdate) WithTimestamp(timestamp time.Time) *StatusUpdate {
+	su.Timestamp = timestamp
+	return su
+}
+
 func (su *StatusUpdate) Down() *StatusUpdate {
 	su.Event = EventDown
 	return su
