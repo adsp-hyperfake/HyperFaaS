@@ -62,11 +62,13 @@ func main() {
 
 	//Concurrent calls
 	//testConcurrentCalls(client, functionIDs[0], 10)
+	//testConcurrentCalls(client, functionIDs[0], 10)
 	// Sequential calls
+	//testSequentialCalls(client, createFunctionResp.FunctionID)
 	//testSequentialCalls(client, createFunctionResp.FunctionID)
 
 	// Concurrent calls for duration
-	testConcurrentCallsForDuration(client, functionIDs[2], RPS, DURATION)
+	testConcurrentCallsForDuration(client, functionIDs[0], RPS, DURATION)
 }
 
 func createClient() (pb.LeafClient, *grpc.ClientConn) {
@@ -100,6 +102,7 @@ func testConcurrentCalls(client pb.LeafClient, functionID *common.FunctionID, nu
 			} else {
 				successCount++
 				totalLatency += latency
+				totalLatency += latency
 			}
 			countMu.Unlock()
 			return nil // Don't propagate errors to cancel other goroutines
@@ -113,25 +116,6 @@ func testConcurrentCalls(client pb.LeafClient, functionID *common.FunctionID, nu
 
 	fmt.Printf("Concurrent calls complete - Successful: %d, Failed: %d, AvgLatency: %v\n", successCount, failureCount, avgLatency)
 }
-
-func testConcurrentCallsForDurationOLD(client pb.LeafClient, functionID *common.FunctionID, rps int, duration time.Duration) {
-	var wg sync.WaitGroup
-	seconds := int(duration.Seconds())
-
-	for i := 0; i < seconds; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			testConcurrentCalls(client, functionID, rps)
-		}()
-		time.Sleep(1 * time.Second)
-	}
-
-	time.Sleep(2 * time.Second)
-
-	wg.Wait()
-}
-
 func testConcurrentCallsForDuration(client pb.LeafClient, functionID *common.FunctionID, rps int, duration time.Duration) {
 	var wg sync.WaitGroup
 	seconds := int(duration.Seconds())
@@ -189,6 +173,7 @@ func sendCall(client pb.LeafClient, functionID *common.FunctionID) (time.Duratio
 		fmt.Printf("Failed to schedule call: %v\n", err)
 		return 0, fmt.Errorf("failed to schedule call: %v", err)
 	}
+
 	// Uncomment if you want to test that the data is the same with the echo function
 	/* if string(response.Data) != string(startReq.Data) {
 		return 0, fmt.Errorf("data mismatch: %v", response.Data)

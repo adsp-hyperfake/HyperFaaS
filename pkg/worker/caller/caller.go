@@ -32,6 +32,7 @@ type CallerServer struct {
 	responsesMu       sync.RWMutex
 	StatsManager      *stats.StatsManager
 	logger            *slog.Logger
+	mu                sync.RWMutex
 }
 
 func NewCallerServer(address string, logger *slog.Logger, statsManager *stats.StatsManager) *CallerServer {

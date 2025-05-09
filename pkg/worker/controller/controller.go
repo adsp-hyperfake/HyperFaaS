@@ -147,6 +147,7 @@ func (s *Controller) Call(ctx context.Context, req *common.CallRequest) (*common
 
 		s.StatsManager.Enqueue(stats.Event().Function(req.FunctionId.Id).Container(req.InstanceId.Id).Down())
 		s.logger.Error("Container timed out or crashed while waiting for response", "instance ID", req.InstanceId.Id, "error", err)
+		s.logger.Error("Container timed out or crashed while waiting for response", "instance ID", req.InstanceId.Id, "error", err)
 
 		return nil, &ContainerCrashError{InstanceID: req.InstanceId.Id, ContainerError: err.Error()}
 
