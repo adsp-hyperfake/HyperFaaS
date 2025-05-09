@@ -44,6 +44,7 @@ type StatusUpdate struct {
 	Event      UpdateEvent
 	Status     UpdateStatus
 	FunctionID string
+	RequestID  string
 }
 
 func Event() *StatusUpdate {
@@ -70,6 +71,11 @@ func (su *StatusUpdate) Response() *StatusUpdate {
 
 func (su *StatusUpdate) WithTimestamp(timestamp time.Time) *StatusUpdate {
 	su.Timestamp = timestamp
+	return su
+}
+
+func (su *StatusUpdate) WithRequestID(requestID string) *StatusUpdate {
+	su.RequestID = requestID
 	return su
 }
 

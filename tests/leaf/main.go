@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log"
 	"sync"
@@ -10,21 +11,28 @@ import (
 	"github.com/3s-rg-codes/HyperFaaS/proto/common"
 	workerpb "github.com/3s-rg-codes/HyperFaaS/proto/controller"
 	pb "github.com/3s-rg-codes/HyperFaaS/proto/leaf"
+	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 )
 
 const (
 	RequestedMemory    = 100 * 1024 * 1024 // 100MB
 	RequestedCPUPeriod = 100000
 	RequestedCPUQuota  = 50000
-	SQLITE_DB_PATH     = "metrics.db"
+	SQLITE_DB_PATH     = "./benchmarks/metrics.db"
 	TIMEOUT            = 10 * time.Second
-	DURATION           = 20 * time.Second
-	RPS                = 1500
+	DURATION           = 10 * time.Second
+	RPS                = 5
 )
+
+type CallMetadata struct {
+	CallQueuedTimestamp  string
+	GotResponseTimestamp string
+}
 
 func main() {
 	// Create leaf client
@@ -46,6 +54,10 @@ func main() {
 			log.Fatalf("Failed to create function: %v", err)
 		}
 		functionIDs[i] = functionID
+		err = saveFunctionId(functionID, imageTag)
+		if err != nil {
+			log.Fatalf("Failed to save function id: %v", err)
+		}
 	}
 
 	//Concurrent calls
@@ -54,7 +66,7 @@ func main() {
 	//testSequentialCalls(client, createFunctionResp.FunctionID)
 
 	// Concurrent calls for duration
-	testConcurrentCallsForDuration(client, functionIDs[0], RPS, DURATION)
+	testConcurrentCallsForDuration(client, functionIDs[2], RPS, DURATION)
 }
 
 func createClient() (pb.LeafClient, *grpc.ClientConn) {
@@ -161,13 +173,14 @@ func sendCall(client pb.LeafClient, functionID *common.FunctionID) (time.Duratio
 	//time.Sleep(time.Duration(rand.Intn(10)+100) * time.Millisecond)
 	startReq := &pb.ScheduleCallRequest{
 		FunctionID: functionID,
-		Data:       []byte(""),
+		Data:       []byte(uuid.New().String()),
 	}
-	//ctx := context.WithValue(context.Background(), "RequestID", uuid.New().String())
 	ctx, cancel := context.WithTimeout(context.Background(), TIMEOUT)
 	defer cancel()
+
+	var metadata metadata.MD
 	start := time.Now()
-	_, err := client.ScheduleCall(ctx, startReq)
+	_, err := client.ScheduleCall(ctx, startReq, grpc.Trailer(&metadata))
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			fmt.Printf("Timeout error: %v\n", ctx.Err())
@@ -176,6 +189,16 @@ func sendCall(client pb.LeafClient, functionID *common.FunctionID) (time.Duratio
 		fmt.Printf("Failed to schedule call: %v\n", err)
 		return 0, fmt.Errorf("failed to schedule call: %v", err)
 	}
+	// Uncomment if you want to test that the data is the same with the echo function
+	/* if string(response.Data) != string(startReq.Data) {
+		return 0, fmt.Errorf("data mismatch: %v", response.Data)
+	} */
+
+	callMetadata := &CallMetadata{
+		CallQueuedTimestamp:  metadata.Get("callQueuedTimestamp")[0],
+		GotResponseTimestamp: metadata.Get("gotResponseTimestamp")[0],
+	}
+	log.Printf("Call queued at %s, got response at %s", callMetadata.CallQueuedTimestamp, callMetadata.GotResponseTimestamp)
 
 	return time.Since(start), nil
 }
@@ -225,4 +248,18 @@ func createFunction(imageTag string, client *pb.LeafClient) (*common.FunctionID,
 	}
 
 	return createFunctionResp.FunctionID, nil
+}
+
+func saveFunctionId(functionID *common.FunctionID, imageTag string) error {
+	db, err := sql.Open("sqlite3", SQLITE_DB_PATH)
+	if err != nil {
+		return fmt.Errorf("failed to open database: %v", err)
+	}
+	defer db.Close()
+
+	_, err = db.Exec("INSERT INTO function_images (function_id, image_tag) VALUES (?, ?)", functionID.Id, imageTag)
+	if err != nil {
+		return fmt.Errorf("failed to insert function id: %v", err)
+	}
+	return nil
 }
