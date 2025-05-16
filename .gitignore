@@ -12,8 +12,9 @@
 *.so
 *.dylib
 .vscode/
-
-#main binary
+# node_modules
+node_modules/
+# main binary
 main
 bin/
 
