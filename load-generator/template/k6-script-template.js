@@ -3,7 +3,10 @@ import { check } from 'k6';
 
 // K6 GRPC client
 const client = new grpc.Client();
-client.load(['../config'], '__PROTO_FILE__');
+
+// Load all proto files
+const protoFiles = __PROTO_FILE__;
+client.load(['../config'], ...protoFiles);
 
 // K6 Options
 export const options = __SCENARIOS__;

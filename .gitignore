@@ -19,7 +19,8 @@
 *.gif
 *.bmp
 *.tiff
-#main binary
+node_modules/
+# main binary
 main
 bin/
 
