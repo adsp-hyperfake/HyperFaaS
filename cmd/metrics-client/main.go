@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/3s-rg-codes/HyperFaaS/proto/controller"
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
@@ -166,7 +165,7 @@ func collectMetrics(db *sql.DB) {
 
 		// Get stats for each container
 		for _, c := range containers {
-			go func(cli *client.Client, db *sql.DB, c types.Container) {
+			go func(cli *client.Client, db *sql.DB, c container.Summary) {
 				stats, err := queryStats(context.TODO(), cli, c.ID)
 				if err != nil {
 					if err == io.EOF || client.IsErrNotFound(err) {
@@ -194,22 +193,21 @@ func createDockerClient() (*client.Client, error) {
 }
 
 // queryStats returns stats for a given container
-func queryStats(ctx context.Context, cli *client.Client, containerID string) (*types.Stats, error) {
+func queryStats(ctx context.Context, cli *client.Client, containerID string) (*container.StatsResponse, error) {
 	cs, err := cli.ContainerStats(ctx, containerID, false)
 	if err != nil {
 		return nil, err
 	}
 	defer cs.Body.Close()
 
-	// ? type types.Stats doesn't exist in github.com/docker/docker >= v28. We are using v27
-	var s types.Stats
+	var s container.StatsResponse
 	if err := json.NewDecoder(cs.Body).Decode(&s); err != nil {
 		return nil, err
 	}
 	return &s, nil
 }
 
-func saveStats(db *sql.DB, s *types.Stats, functionID string, containerID string) error {
+func saveStats(db *sql.DB, s *container.StatsResponse, functionID string, containerID string) error {
 	_, err := db.Exec(`
 		INSERT INTO cpu_mem_stats (
 			instance_id, function_id, timestamp,
