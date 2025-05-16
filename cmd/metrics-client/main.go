@@ -194,7 +194,7 @@ func createDockerClient() (*client.Client, error) {
 
 // queryStats returns stats for a given container
 func queryStats(ctx context.Context, cli *client.Client, containerID string) (*container.StatsResponse, error) {
-	cs, err := cli.ContainerStats(ctx, containerID, false)
+	cs, err := cli.ContainerStatsOneShot(ctx, containerID)
 	if err != nil {
 		return nil, err
 	}
