@@ -17,7 +17,7 @@ require (
 	golang.org/x/sync v0.14.0
 	gonum.org/v1/gonum v0.16.0
 	google.golang.org/grpc v1.64.0
-	google.golang.org/protobuf v1.35.2
+	google.golang.org/protobuf v1.36.5
 )
 
 require (
@@ -49,9 +49,9 @@ require (
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.52.0 // indirect
 	go.opentelemetry.io/otel v1.34.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.27.0 // indirect
-	go.opentelemetry.io/otel/metric v1.27.0 // indirect
+	go.opentelemetry.io/otel/metric v1.34.0 // indirect
 	go.opentelemetry.io/otel/sdk v1.27.0 // indirect
-	go.opentelemetry.io/otel/trace v1.27.0 // indirect
+	go.opentelemetry.io/otel/trace v1.34.0 // indirect
 	golang.org/x/net v0.33.0 // indirect
 	golang.org/x/sys v0.29.0 // indirect
 	golang.org/x/text v0.25.0 // indirect
