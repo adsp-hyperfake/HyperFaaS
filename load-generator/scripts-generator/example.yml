@@ -1,0 +1,48 @@
+functions:
+  - name: func_1
+    endpoint: api/func1
+    parameters:
+      - name: param1
+        values: [1.5, 2, 2.5, 3, 3.5]
+
+      - name: param2
+        values: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+
+  - name: func_2
+    endpoint: api/func1
+    parameters:
+      - name: param1
+        values: [1, 2, 3]
+
+      - name: param2
+        values: [10]
+
+load_patterns:
+  - name: steady_ramp_1
+    type: steady_ramp
+
+  - name: increasing_waves_1
+    type: increasing_waves
+
+  - name: constant_rate_1
+    type: constant_rate
+
+setups:
+  - name: 1
+    count: 2
+    duration:
+      min: 1
+      max: 100
+      mean: 30
+    rps:
+      min: 1
+      max: 1000
+      mean: 600
+    stages:
+      min: 1
+      max: 50
+      mean: 30
+    load_patterns: ["steady_ramp_1"]
+    functions: all
+    max_vus: 75
+    preallocated_vus: 10
