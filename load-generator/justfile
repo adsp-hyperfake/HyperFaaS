@@ -1,7 +1,5 @@
 default:
-	just clean
-	just build
-	just run
+	@just --list
 
 build:
 	node build.js
@@ -11,3 +9,9 @@ run:
 
 clean: 
 	rm -rf generated
+
+run-with-output:
+	k6 run  --out csv=test_results.csv script.js
+
+export-metrics:
+	uv run ../benchmarks/import_metrics.py --csv test_results.csv --db ../benchmarks/metrics.db
