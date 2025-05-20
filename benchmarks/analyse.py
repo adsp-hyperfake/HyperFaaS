@@ -87,23 +87,15 @@ def print_request_latency(db_path: str):
     """ print request latency for each function and other metrics"""
     metrics = get_metrics(db_path)
     print("Request Latency by Image Tag: \n")
-    request_latency = metrics[metrics['metric_name'] == 'grpc_req_duration'].groupby(['image_tag']).agg({
-        'metric_value': ['mean', 'min', 'max',
-                        lambda x: np.percentile(x, 50),
-                        lambda x: np.percentile(x, 75), 
-                        lambda x: np.percentile(x, 95),
-                        lambda x: np.percentile(x, 99)]
-    }).round(2)
+    request_latency = aggregate_and_round(metrics.groupby(['image_tag']), 'grpc_req_duration')
 
-    # Rename columns
-    request_latency.columns = ['mean_ms', 'min_ms', 'max_ms', 'p50_ms', 'p75_ms', 'p95_ms', 'p99_ms']
     print(request_latency)
     print("\n")
 
     print("Request Latency by Scenario and Image Tag: \n")
     # Filter for grpc_req_duration metrics and calculate latency percentiles
-    request_latency = metrics[metrics['metric_name'] == 'grpc_req_duration'].groupby(['scenario', 'image_tag'])
-    request_latency = aggregate_and_round(request_latency)
+    request_latency = metrics.groupby(['scenario', 'image_tag'])
+    request_latency = aggregate_and_round(request_latency, 'grpc_req_duration')
 
     print(request_latency)
     print("\n")
@@ -111,19 +103,18 @@ def print_request_latency(db_path: str):
 def print_data_transfer(db_path: str):
     """ print data transfer for each function and other metrics"""
     metrics = get_metrics(db_path)
-    columns = ['mean', 'min', 'max', 'p50', 'p75', 'p95', 'p99']
     # we have 2 metrics for data transfer: data_sent and data_received
     # we want to print the mean of both
     print("Data Sent by Image Tag (Bytes): \n")
-    data_sent = metrics[metrics['metric_name'] == 'data_sent'].groupby(['image_tag'])
-    data_sent = aggregate_and_round(data_sent, columns)
+    data_sent = metrics.groupby(['image_tag'])
+    data_sent = aggregate_and_round(data_sent, 'data_sent')
 
     print(data_sent)
     print("\n")
 
     print("Data Received by Image Tag (Bytes): \n")
-    data_received = metrics[metrics['metric_name'] == 'data_received'].groupby(['image_tag'])
-    data_received = aggregate_and_round(data_received, columns)
+    data_received = metrics.groupby(['image_tag'])
+    data_received = aggregate_and_round(data_received, 'data_received')
 
     print(data_received)
     print("\n")
@@ -162,16 +153,16 @@ def print_function_summary(db_path: str):
     print("\nFunction Summary Statistics:")
     print(tabulate(df, headers='keys', tablefmt='psql', showindex=True))
 
-def aggregate_and_round(df: pd.DataFrame, columns: List[str] =['mean_ms', 'min_ms', 'max_ms', 'p50_ms', 'p75_ms', 'p95_ms', 'p99_ms'] ) -> pd.DataFrame:
+def aggregate_and_round(df: pd.DataFrame,col: str) -> pd.DataFrame:
     """ aggregate and round the dataframe"""
     r = df.agg({
-        'metric_value': ['mean', 'min', 'max',
-                        lambda x: np.percentile(x, 50),
-                        lambda x: np.percentile(x, 75), 
-                        lambda x: np.percentile(x, 95),
-                        lambda x: np.percentile(x, 99)]
+        col: ['count','mean', 'min', 'max',
+              lambda x: x.quantile(0.50),
+              lambda x: x.quantile(0.75),
+              lambda x: x.quantile(0.95),
+              lambda x: x.quantile(0.99)]
     }).round(2)
-    r.columns = columns
+    r.columns =  ['count','mean', 'min', 'max', 'p50', 'p75', 'p95', 'p99']
     return r
 
 

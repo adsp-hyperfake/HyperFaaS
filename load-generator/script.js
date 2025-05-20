@@ -13,7 +13,7 @@ const instanceIdKey = 'instanceid';
 const callQueuedTimestamp = new Trend(callQueuedTimestampKey, true);
 const gotResponseTimestamp = new Trend(gotResponseTimestampKey, true);
 const instanceIdMetric = new Trend('instanceid');
-// Request Id metric
+
 
 // Helper functions
 function getRandomInt(min, max) {
@@ -117,6 +117,7 @@ export function setup() {
     'BFS function created successfully': (r) => r && r.message && r.message.functionID && r.message.functionID.id
   });
   bfsFunctionId = bfsCreateResponse.message.functionID.id;
+  console.log("bfsFunctionId=", bfsFunctionId);
 
   // Create Echo function
   const echoCreateResponse = client.invoke('leaf.Leaf/CreateFunction', {
@@ -133,6 +134,7 @@ export function setup() {
     'Echo function created successfully': (r) => r && r.message && r.message.functionID && r.message.functionID.id
   });
   echoFunctionId = echoCreateResponse.message.functionID.id;
+  console.log("echoFunctionId=", echoFunctionId);
 
   // Create Thumbnailer function
   const thumbnailerCreateResponse = client.invoke('leaf.Leaf/CreateFunction', {
@@ -149,6 +151,7 @@ export function setup() {
     'Thumbnailer function created successfully': (r) => r && r.message && r.message.functionID && r.message.functionID.id
   });
   thumbnailerFunctionId = thumbnailerCreateResponse.message.functionID.id;
+  console.log("thumbnailerFunctionId=", thumbnailerFunctionId);
 
   // Download the image
   imageDataB64 = encoding.b64encode(http.get(imageUrl).body);
@@ -354,14 +357,16 @@ for (const funcInfo of functionsToProcess) {
 }
 
 config.persistGeneration = __ENV.PERSIST_GENERATION === 'true' || false;
-
 // Store the persistence data in a variable accessible to handleSummary
 const persistenceData = {
   metadata: {
     seed: config.workloadSeed,
     totalDuration: config.totalTestDuration,
     generatedAt: new Date().toISOString(),
-    configuration: config
+    configuration: config,
+    /* bfsFunctionId: "bfsFunctionId",
+    echoFunctionId: echoFunctionId,
+    thumbnailerFunctionId: thumbnailerFunctionId */
   },
   scenarios: generatedScenarios
 };

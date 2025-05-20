@@ -1,0 +1,175 @@
+import csv
+import sqlite3
+from collections import defaultdict
+import re
+
+def create_tables(conn):
+    cursor = conn.cursor()
+    
+    # one row per request is the idea
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS metrics (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp INTEGER,
+        scenario TEXT,
+        service TEXT,
+        image_tag TEXT,
+        instance_id TEXT,
+        request_id TEXT,
+        
+        -- Request timing metrics
+        grpc_req_duration REAL,
+        callqueuedtimestamp REAL,
+        gotresponsetimestamp REAL,
+        
+        -- Data metrics
+        data_sent REAL,
+        data_received REAL,
+        iteration_duration REAL,
+        
+        -- Other metadata
+        proto TEXT,
+        subproto TEXT,
+        group_name TEXT,
+        extra_tags TEXT,
+        
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    ''')
+    conn.commit()
+
+def parse_tags(tags_str):
+    """Parse key-value pairs from a string like 'key1=value1&key2=value2'"""
+    if not tags_str:
+        return {}
+    
+    result = {}
+    # Handle cases where the tag might have equals signs in its value
+    pairs = re.findall(r'([^&=]+)=([^&]*)', tags_str)
+    for key, value in pairs:
+        result[key] = value
+    
+    return result
+
+def import_csv_to_sqlite(csv_file='test_results.csv', db_file='metrics.db'):
+    conn = sqlite3.connect(db_file)
+    create_tables(conn)
+    cursor = conn.cursor()
+
+    # to collect metrics for each request
+    requests = defaultdict(dict)
+    
+    # collect all metrics by request_id
+    with open(csv_file, 'r') as file:
+        csv_reader = csv.DictReader(file)
+        for row in csv_reader:
+            # Skip setup rows
+            if '::setup' in row['group']:
+                continue
+                
+            # Skip dropped iterations
+            if row['metric_name'] == 'dropped_iterations':
+                continue
+            
+            # Extract request identifier
+            scenario = row['scenario']
+            metadata = row['metadata']
+            
+            # Skip rows without proper metadata or scenario
+            if not scenario or not metadata:
+                continue
+                
+            # The metadata can be used as a request_id
+            request_key = metadata
+            
+            # Store common metadata for this request
+            requests[request_key]['scenario'] = scenario
+            requests[request_key]['service'] = row['service']
+            requests[request_key]['timestamp'] = row['timestamp']
+            requests[request_key]['request_id'] = metadata
+            
+            # Parse extra_tags to extract image_tag
+            if row['extra_tags']:
+                tags = parse_tags(row['extra_tags'])
+                if 'image_tag' in tags:
+                    requests[request_key]['image_tag'] = tags['image_tag']
+                if 'instanceId' in tags:
+                    requests[request_key]['instance_id'] = tags['instanceId']
+                    
+            # Store proto and subproto info
+            requests[request_key]['proto'] = row['proto']
+            requests[request_key]['subproto'] = row['subproto']
+            requests[request_key]['group_name'] = row['group']
+            requests[request_key]['extra_tags'] = row['extra_tags']
+            
+            # Store callqueuedtimestamp, gotresponsetimestamp, data_sent, data_received, iteration_duration
+            if row['metric_name'] == 'callqueuedtimestamp':
+                requests[request_key]['callqueuedtimestamp'] = row['metric_value']
+            elif row['metric_name'] == 'gotresponsetimestamp':
+                requests[request_key]['gotresponsetimestamp'] = row['metric_value']
+            elif row['metric_name'] == 'data_sent':
+                requests[request_key]['data_sent'] = row['metric_value']
+            elif row['metric_name'] == 'data_received':
+                requests[request_key]['data_received'] = row['metric_value']
+            elif row['metric_name'] == 'iteration_duration':
+                requests[request_key]['iteration_duration'] = row['metric_value']
+            elif row['metric_name'] == 'grpc_req_duration':
+                requests[request_key]['grpc_req_duration'] = row['metric_value']
+    
+    # insert collected requests into the database
+    for request_key, data in requests.items():
+            
+        cursor.execute('''
+        INSERT INTO metrics (
+            timestamp, scenario, service, image_tag, instance_id, request_id,
+            grpc_req_duration, callqueuedtimestamp, gotresponsetimestamp, 
+            data_sent, data_received, iteration_duration,
+            proto, subproto, group_name, extra_tags
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            data.get('timestamp'),
+            data.get('scenario'),
+            data.get('service'),
+            data.get('image_tag'),
+            data.get('instance_id'),
+            data.get('request_id'),
+            data.get('grpc_req_duration'),
+            data.get('callqueuedtimestamp'),
+            data.get('gotresponsetimestamp'),
+            data.get('data_sent'),
+            data.get('data_received'),
+            data.get('iteration_duration'),
+            data.get('proto'),
+            data.get('subproto'),
+            data.get('group_name'),
+            data.get('extra_tags')
+        ))
+    
+    conn.commit()
+    
+    # Print statistics
+    cursor.execute("SELECT COUNT(*) FROM metrics")
+    count = cursor.fetchone()[0]
+    print(f"Imported {count} unique requests into the database")
+    
+    # Sample query to verify data
+    cursor.execute("""
+    SELECT scenario, COUNT(*), AVG(grpc_req_duration) as avg_duration 
+    FROM metrics 
+    GROUP BY scenario
+    """)
+    print("\nScenario statistics:")
+    for row in cursor.fetchall():
+        print(f"  {row[0]}: {row[1]} requests, avg duration: {row[2]:.3f}ms")
+    
+    conn.close()
+
+if __name__ == "__main__":
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='Import metrics from CSV to SQLite')
+    parser.add_argument('--csv', default='test_results.csv', help='Path to CSV file')
+    parser.add_argument('--db', default='metrics.db', help='Path to SQLite database')
+    
+    args = parser.parse_args()
+    import_csv_to_sqlite(args.csv, args.db)
