@@ -65,6 +65,7 @@ func initDB(db *sql.DB) error {
 			-- Units: nanoseconds (Linux)
 			-- Units: 100's of nanoseconds (Windows)
 			cpu_total_usage BIGINT,
+			cpu_percent FLOAT,
 
 			-- Memory. Linux
 			memory_usage BIGINT,
@@ -213,16 +214,40 @@ func saveStats(db *sql.DB, s *container.StatsResponse, functionID string, contai
 			instance_id, function_id, timestamp,
 
 			cpu_total_usage,
+			cpu_percent,
 
 			memory_usage, memory_max_usage
-		) VALUES (?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		containerID,
 		functionID,
 		s.Read,
 		s.CPUStats.CPUUsage.TotalUsage,
+		calculateCPUPercent(s),
 		s.MemoryStats.Usage,
 		s.MemoryStats.MaxUsage,
 	)
 
 	return err
+}
+
+// calculateCPUPercent calculates the average CPU usage percent over the last interval.
+// Returns value in range 0 to 100*numCPUs
+// inspired by https://github.com/docker/cli/blob/28.x/cli/command/container/stats_helpers.go
+func calculateCPUPercent(s *container.StatsResponse) float64 {
+	cpuPercent := 0.0
+	// calculate the change for the cpu usage of the container in between readings
+	previousCPU := float64(s.PreCPUStats.CPUUsage.TotalUsage)
+	cpuDelta := float64(s.CPUStats.CPUUsage.TotalUsage) - previousCPU
+	// calculate the change for the entire system between readings
+	previousSystem := float64(s.PreCPUStats.SystemUsage)
+	systemDelta := float64(s.CPUStats.SystemUsage) - previousSystem
+	onlineCPUs := float64(s.CPUStats.OnlineCPUs)
+
+	if onlineCPUs == 0.0 {
+		onlineCPUs = float64(len(s.CPUStats.CPUUsage.PercpuUsage))
+	}
+	if systemDelta > 0.0 && cpuDelta > 0.0 {
+		cpuPercent = (cpuDelta / systemDelta) * onlineCPUs * 100.0
+	}
+	return cpuPercent
 }
