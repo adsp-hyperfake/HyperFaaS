@@ -25,6 +25,9 @@ def create_tables(conn):
         url TEXT,
         extra_tags TEXT,
         metadata TEXT,
+        request_id TEXT,
+        image_tag TEXT,
+        instance_id TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     ''')
@@ -38,33 +41,56 @@ def import_csv_to_sqlite(csv_file='test_results.csv', db_file='metrics.db'):
     with open(csv_file, 'r') as file:
         csv_reader = csv.DictReader(file)
         for row in csv_reader:
+
+            # request id is the pair of kv inside the metadata, using "vu" and "iter"
+            # Example: "vu=52&iter=0"
+            request_id = row['metadata']
+
+            # image tag is the pair of kv inside the extra_tags
+            # Example of extra tags: "type=constant-arrival-rate&scenario_group=bfs&image_tag=hyperfaas-bfs-json:latest"
+            # Parse extra_tags into a dict and extract image_tag if present
+            image_tag = None
+            if row['extra_tags']:
+                tags = dict(tag.split('=') for tag in row['extra_tags'].split('&'))
+                image_tag = tags.get('image_tag')
+
+            # instance id is the pair of kv inside the extra_tags in the instanceid metric
+            instance_id = None
+            if row['metric_name'] == 'instanceid':
+                tags = dict(tag.split('=') for tag in row['extra_tags'].split('&'))
+                instance_id = tags.get('instance_id')
+
+
             cursor.execute('''
             INSERT INTO metrics (
                 metric_name, timestamp, metric_value, check_name, error,
                 error_code, expected_response, group_name, method, name,
                 proto, scenario, service, status, subproto, tls_version,
-                url, extra_tags, metadata
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                url, extra_tags, metadata, request_id, image_tag, instance_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 row['metric_name'],
                 row['timestamp'],
                 row['metric_value'],
-                row['check'],
+                None,
                 row['error'],
-                row['error_code'],
-                row['expected_response'],
+                None,
+                None,
                 row['group'],
-                row['method'],
-                row['name'],
+                None,
+                None,
                 row['proto'],
                 row['scenario'],
                 row['service'],
-                row['status'],
+                None,
                 row['subproto'],
-                row['tls_version'],
-                row['url'],
+                None,
+                None,
                 row['extra_tags'],
-                row['metadata']
+                row['metadata'],
+                request_id,
+                image_tag,
+                instance_id
             ))
     
     conn.commit()
