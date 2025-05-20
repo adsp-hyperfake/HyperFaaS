@@ -13,23 +13,23 @@ clean:
 run-with-output:
 	k6 run  --out csv=test_results.csv script.js
 
-export-metrics:
-	uv run ../benchmarks/import_metrics.py --csv test_results.csv --db ../benchmarks/metrics.db
+export:
+	uv run ../benchmarks/import.py --csv test_results.csv --db ../benchmarks/metrics.db
 
-
+# run a seeded load generation with parameters
 run-seeded:
 	k6 run \
 	--quiet \
 	--out csv=test_results.csv \
-	-e WORKLOAD_SEED=12345 \
+	-e WORKLOAD_SEED=21020 \
 	-e PERSIST_GENERATION=true \
-	-e TOTAL_TEST_DURATION="10s" \
+	-e TOTAL_TEST_DURATION="2m" \
 	-e MIN_PREALLOCATED_VUS=10 \
 	-e MAX_PREALLOCATED_VUS=50 \
-	-e MIN_MAX_VUS=100 \
-	-e MAX_MAX_VUS=800 \
+	-e MIN_MAX_VUS=1000 \
+	-e MAX_MAX_VUS=1110 \
 	-e RAMPING_START_RATE_MIN=1 \
-	-e RAMPING_START_RATE_MAX=5 \
+	-e RAMPING_START_RATE_MAX=50 \
 	-e BFS_MIN_SCENARIOS=5 \
 	-e BFS_MAX_SCENARIOS=8 \
 	-e BFS_CONSTANT_SCENARIOS_RATIO=0.6 \
@@ -37,18 +37,26 @@ run-seeded:
 	-e BFS_CONSTANT_RATE_MAX=300 \
 	-e BFS_BURST_TARGET_RATE_MIN=300 \
 	-e BFS_BURST_TARGET_RATE_MAX=600 \
-	-e ECHO_MIN_SCENARIOS=2 \
-	-e ECHO_MAX_SCENARIOS=3 \
+	-e ECHO_MIN_SCENARIOS=6 \
+	-e ECHO_MAX_SCENARIOS=10 \
 	-e ECHO_CONSTANT_SCENARIOS_RATIO=0.5 \
 	-e ECHO_CONSTANT_RATE_MIN=100 \
 	-e ECHO_CONSTANT_RATE_MAX=300 \
 	-e ECHO_BURST_TARGET_RATE_MIN=300 \
 	-e ECHO_BURST_TARGET_RATE_MAX=800 \
-	-e THUMBNAILER_MIN_SCENARIOS=2 \
-	-e THUMBNAILER_MAX_SCENARIOS=3 \
+	-e THUMBNAILER_MIN_SCENARIOS=5 \
+	-e THUMBNAILER_MAX_SCENARIOS=12 \
 	-e THUMBNAILER_CONSTANT_SCENARIOS_RATIO=0.8 \
 	-e THUMBNAILER_CONSTANT_RATE_MIN=40 \
 	-e THUMBNAILER_CONSTANT_RATE_MAX=80 \
 	-e THUMBNAILER_BURST_TARGET_RATE_MIN=100 \
 	-e THUMBNAILER_BURST_TARGET_RATE_MAX=200 \
-	script.js > generated_scenarios.json
+	script.js 1> generated_scenarios.json 2> stderr_output.txt && \
+	jq --arg bfs "$(grep -o "bfsFunctionId= [^\"]*" stderr_output.txt | sed 's/functionId= //' | awk '{print $2}')" \
+	   --arg echo "$(grep -o "echoFunctionId= [^\"]*" stderr_output.txt | sed 's/functionId= //' | awk '{print $2}')" \
+	   --arg thumb "$(grep -o "thumbnailerFunctionId= [^\"]*" stderr_output.txt | sed 's/functionId= //' | awk '{print $2}')" \
+	   '.metadata += {bfsFunctionId: $bfs, echoFunctionId: $echo, thumbnailerFunctionId: $thumb}' \
+	   generated_scenarios.json > tmp.json && mv tmp.json generated_scenarios.json && rm stderr_output.txt
+
+# dont judge me for the monster above... there is no way to get data out of the setup function in k6
+# so we have to do this.
