@@ -20,6 +20,9 @@
 *.bmp
 *.tiff
 node_modules/
+# generated_scenarios.json
+generated_scenarios.json
+metrics.db
 # main binary
 main
 bin/
