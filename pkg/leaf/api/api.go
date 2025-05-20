@@ -190,6 +190,7 @@ func (s *LeafServer) ScheduleCall(ctx context.Context, req *leaf.ScheduleCallReq
 	trailer := metadata.New(map[string]string{
 		"callQueuedTimestamp":  callMetadata.CallQueuedTimestamp,
 		"gotResponseTimestamp": callMetadata.GotResponseTimestamp,
+		"instanceID":           string(instanceID),
 	})
 	grpc.SetTrailer(ctx, trailer)
 
