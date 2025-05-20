@@ -9,8 +9,11 @@ import { randomSeed } from 'k6';
 import { Trend } from 'k6/metrics';
 const callQueuedTimestampKey = 'callqueuedtimestamp';
 const gotResponseTimestampKey = 'gotresponsetimestamp';
+const instanceIdKey = 'instanceid';
 const callQueuedTimestamp = new Trend(callQueuedTimestampKey, true);
 const gotResponseTimestamp = new Trend(gotResponseTimestampKey, true);
+const instanceIdMetric = new Trend('instanceid');
+// Request Id metric
 
 // Helper functions
 function getRandomInt(min, max) {
@@ -45,7 +48,7 @@ const config = {
   // BFS Configuration
   BFS_MIN_SCENARIOS: parseInt(__ENV.BFS_MIN_SCENARIOS) || 1,
   BFS_MAX_SCENARIOS: parseInt(__ENV.BFS_MAX_SCENARIOS) || 3,
-  BFS_CONSTANT_SCENARIOS_RATIO: parseFloat(__ENV.BFS_CONSTANT_SCENARIOS_RATIO) || 0.5,
+  BFS_CONSTANT_SCENARIOS_RATIO: parseFloat(__ENV.BFS_CONCallQueuedTimestampSTANT_SCENARIOS_RATIO) || 0.5,
   BFS_CONSTANT_RATE_MIN: parseInt(__ENV.BFS_CONSTANT_RATE_MIN) || 5,
   BFS_CONSTANT_RATE_MAX: parseInt(__ENV.BFS_CONSTANT_RATE_MAX) || 20,
   BFS_BURST_TARGET_RATE_MIN: parseInt(__ENV.BFS_BURST_TARGET_RATE_MIN) || 10,
@@ -174,8 +177,16 @@ export function bfsFunction(setupData) {
     functionID: { id: setupData.bfsFunctionId },
     data: data
   });
+
+  if (response.error) {
+    console.log('Error scheduling BFS function:', response.error);
+    return;
+  }
+
   callQueuedTimestamp.add(isoToMs(response.trailers[callQueuedTimestampKey]));
   gotResponseTimestamp.add(isoToMs(response.trailers[gotResponseTimestampKey]));
+  instanceIdMetric.add(0, {instanceId: response.trailers[instanceIdKey][0]});
+
   client.close();
 }
 
@@ -189,8 +200,13 @@ export function echoFunction(setupData) {
     functionID: { id: setupData.echoFunctionId },
     data: data
   });
+  if (response.error) {
+    console.log('Error scheduling Echo function:', response.error);
+    return;
+  }
   callQueuedTimestamp.add(isoToMs(response.trailers[callQueuedTimestampKey]));
   gotResponseTimestamp.add(isoToMs(response.trailers[gotResponseTimestampKey]));
+  instanceIdMetric.add(0, {instanceId: response.trailers[instanceIdKey][0]});
 
   // check that there is no error and that the data that was sent is the same as the data that was received
   /* check(response, {
@@ -229,8 +245,14 @@ export function thumbnailerFunction(setupData) {
     functionID: { id: setupData.thumbnailerFunctionId },
     data: data
   });
+  if (response.error) {
+    console.log('Error scheduling Thumbnailer function:', response.error);
+    return;
+  }
   callQueuedTimestamp.add(isoToMs(response.trailers[callQueuedTimestampKey]));
   gotResponseTimestamp.add(isoToMs(response.trailers[gotResponseTimestampKey]));
+  instanceIdMetric.add(0, {instanceId: response.trailers[instanceIdKey][0]});
+
   client.close();
 }
 
@@ -345,7 +367,8 @@ const persistenceData = {
 };
 
 export const options = {
-  scenarios: generatedScenarios
+  scenarios: generatedScenarios,
+  systemTags: ['error', 'group', 'proto', 'scenario', 'service', 'subproto', 'extra_tags', 'metadata', 'vu', 'iter']
 };
 
 export function handleSummary(data) {
