@@ -29,11 +29,11 @@ def get_cold_start_times(db_path: str) -> pd.DataFrame:
         WHERE event = 6 AND status = 0  -- EVENT_RUNNING, STATUS_SUCCESS
     )
     SELECT 
-        s.function_id,
-        s.instance_id,
-        fi.image_tag,
-        s.start_time,
-        r.running_time,
+        s.function_id as function_id,
+        s.instance_id as instance_id,
+        fi.image_tag as image_tag,
+        s.start_time as start_time,
+        r.running_time as running_time,
         (julianday(r.running_time) - julianday(s.start_time)) * 24 * 60 * 60 * 1000 as cold_start_ms
     FROM start_events s
     JOIN running_events r ON s.instance_id = r.instance_id
@@ -123,7 +123,6 @@ def print_cold_start_metrics(db_path: str):
     """ print cold start metrics for each function"""
     metrics = get_metrics(db_path)
     cold_starts = get_cold_start_times(db_path)
-    pass
     # This is a bit trickier . We have some additional metrics that help us:
     # - callqueuedtimestamp
     # - gotresponsetimestamp
@@ -138,8 +137,24 @@ def print_cold_start_metrics(db_path: str):
     
     # merge both dataframes on instance_id ?
     # if we group metrics by request_id, we will have the instance_id available in each entry
-    
-    # TODO
+    print("\n WIP WIP WIP WIP WIP WIP !!! \n")
+    metrics_by_instance = metrics[['callqueuedtimestamp', 'gotresponsetimestamp', 'instance_id', 'grpc_req_duration']]
+    # merge with cold_starts on instance_id
+    cold_starts_with_metrics = pd.merge(cold_starts, metrics_by_instance, on='instance_id', how='left')
+
+    cold_starts_per_image = cold_starts_with_metrics.groupby('image_tag')
+    cold_starts_per_image = aggregate_and_round(cold_starts_per_image, 'cold_start_ms')
+
+    print("\n Cold Start in milliseconds by Image Tag: \n")
+    print(cold_starts_per_image)
+
+
+    total_request_latency = cold_starts_with_metrics.groupby('image_tag')
+    total_request_latency = aggregate_and_round(total_request_latency, 'grpc_req_duration')
+    print("\n Total Request latency for those cold starts: \n")
+    print(total_request_latency)
+
+
     
 
 def print_cold_start_times(db_path: str):
@@ -177,6 +192,7 @@ def main():
     try:
         print_request_latency(args.db_path)
         print_data_transfer(args.db_path)
+        print_cold_start_metrics(args.db_path)
     except sqlite3.OperationalError as e:
         print(f"Error accessing database: {e}", file=sys.stderr)
         sys.exit(1)

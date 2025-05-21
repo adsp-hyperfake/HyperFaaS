@@ -2,6 +2,7 @@ import csv
 import sqlite3
 from collections import defaultdict
 import re
+import json
 
 def create_tables(conn):
     cursor = conn.cursor()
@@ -36,6 +37,15 @@ def create_tables(conn):
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     ''')
+    
+    # Create function_images table
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS function_images (
+        function_id TEXT PRIMARY KEY,
+        image_tag TEXT
+    )
+    ''')
+    
     conn.commit()
 
 def parse_tags(tags_str):
@@ -51,9 +61,41 @@ def parse_tags(tags_str):
     
     return result
 
-def import_csv_to_sqlite(csv_file='test_results.csv', db_file='metrics.db'):
+def import_function_images(conn, json_file='generated_scenarios.json'):
+    """Import function IDs and their image tags from the scenarios JSON file"""
+    with open(json_file, 'r') as f:
+        data = json.load(f)
+    
+    cursor = conn.cursor()
+    
+    # Extract function IDs and image tags from metadata
+    function_images = [
+        (data['metadata']['bfsFunctionId'], data['metadata']['configuration']['BFS_IMAGE_TAG']),
+        (data['metadata']['echoFunctionId'], data['metadata']['configuration']['ECHO_IMAGE_TAG']),
+        (data['metadata']['thumbnailerFunctionId'], data['metadata']['configuration']['THUMBNAILER_IMAGE_TAG'])
+    ]
+    
+    # Insert or replace function images
+    cursor.executemany('''
+    INSERT OR REPLACE INTO function_images (function_id, image_tag)
+    VALUES (?, ?)
+    ''', function_images)
+    
+    conn.commit()
+    
+    # Print statistics
+    print("\nImported function images:")
+    cursor.execute("SELECT * FROM function_images")
+    for row in cursor.fetchall():
+        print(f"  Function {row[0]}: {row[1]}")
+
+def import_csv_to_sqlite(csv_file='test_results.csv', db_file='metrics.db', json_file='generated_scenarios.json'):
     conn = sqlite3.connect(db_file)
     create_tables(conn)
+    
+    # First import function images from JSON
+    import_function_images(conn, json_file)
+    
     cursor = conn.cursor()
 
     # to collect metrics for each request
@@ -170,6 +212,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Import metrics from CSV to SQLite')
     parser.add_argument('--csv', default='test_results.csv', help='Path to CSV file')
     parser.add_argument('--db', default='metrics.db', help='Path to SQLite database')
+    parser.add_argument('--json', default='generated_scenarios.json', help='Path to scenarios JSON file')
     
     args = parser.parse_args()
-    import_csv_to_sqlite(args.csv, args.db)
+    import_csv_to_sqlite(args.csv, args.db, args.json)
