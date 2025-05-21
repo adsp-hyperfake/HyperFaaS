@@ -122,13 +122,15 @@ def import_csv_to_sqlite(csv_file='test_results.csv', db_file='metrics.db', json
                 continue
                 
             # The metadata can be used as a request_id
-            request_key = metadata
+            # Transform metadata string into consistent request_key format
+            metadata_dict = {k: v for part in metadata.split('&') for k, v in [part.split('=')]}
+            request_key = f"vu={metadata_dict['vu']}&iter={metadata_dict['iter']}"
             
             # Store common metadata for this request
             requests[request_key]['scenario'] = scenario
             requests[request_key]['service'] = row['service']
             requests[request_key]['timestamp'] = row['timestamp']
-            requests[request_key]['request_id'] = metadata
+            requests[request_key]['request_id'] = request_key
             
             # Parse extra_tags to extract image_tag
             if row['extra_tags']:
