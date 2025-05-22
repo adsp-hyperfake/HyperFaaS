@@ -295,7 +295,7 @@ for (const funcInfo of functionsToProcess) {
   const maxScenarios = config[`${prefix}_MAX_SCENARIOS`];
   
   // Skip if function is disabled or no duration
-  if (minScenarios === 0 || totalTestDurationSeconds === 0) {
+  if (maxScenarios === 0 || totalTestDurationSeconds === 0) {
     console.log(`Skipping ${funcInfo.name} scenarios (disabled or no duration)`);
     continue;
   }
