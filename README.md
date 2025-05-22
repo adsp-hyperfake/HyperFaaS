@@ -113,8 +113,11 @@ just clean
 To generate preliminary data and test metric generation, you can do the following:
 
 ```
+# Build all images if you haven't already
+just build
+
 # Start HyperFaaS
-just d
+just start
 
 # Start the metrics client
 just metrics-client
