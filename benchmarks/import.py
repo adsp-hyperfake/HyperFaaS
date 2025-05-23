@@ -204,7 +204,10 @@ def import_csv_to_sqlite(csv_file='test_results.csv', db_file='metrics.db', json
     """)
     print("\nScenario statistics:")
     for row in cursor.fetchall():
-        print(f"  {row[0]}: {row[1]} requests, avg duration: {row[2]:.3f}ms")
+        try:
+            print(f"  {row[0]}: {row[1]} requests, avg duration: {row[2]:.3f}ms")
+        except:
+            pass
     
     conn.close()
 
