@@ -13,6 +13,19 @@ export const callQueuedTimestamp = new Trend(callQueuedTimestampKey, true);
 export const gotResponseTimestamp = new Trend(gotResponseTimestampKey, true);
 export const instanceIdMetric = new Trend('instanceid');
 
+// Create global config
+const config = {
+  // Global Configuration
+  workloadSeed: parseInt(__ENV.WORKLOAD_SEED) || Date.now(),
+  totalTestDuration: __ENV.TOTAL_TEST_DURATION || "60s",
+  minPreallocatedVus: parseInt(__ENV.MIN_PREALLOCATED_VUS) || 10,
+  maxPreallocatedVus: parseInt(__ENV.MAX_PREALLOCATED_VUS) || 50,
+  minMaxVus: parseInt(__ENV.MIN_MAX_VUS) || 20,
+  maxMaxVus: parseInt(__ENV.MAX_MAX_VUS) || 100,
+  rampingStartRateMin: parseInt(__ENV.RAMPING_START_RATE_MIN) || 1,
+  rampingStartRateMax: parseInt(__ENV.RAMPING_START_RATE_MAX) || 5,
+}
+
 // Load executor functions for each function
 // Unfortunately, ESM prohibits dynamic exports, so we have to export every function explicitly
 export { bfsFunction };
@@ -48,19 +61,6 @@ const functionsToProcess = [
     imageTag: config.THUMBNAILER_IMAGE_TAG
   }
 ];
-
-// Create global config
-const config = {
-  // Global Configuration
-  workloadSeed: parseInt(__ENV.WORKLOAD_SEED) || Date.now(),
-  totalTestDuration: __ENV.TOTAL_TEST_DURATION || "60s",
-  minPreallocatedVus: parseInt(__ENV.MIN_PREALLOCATED_VUS) || 10,
-  maxPreallocatedVus: parseInt(__ENV.MAX_PREALLOCATED_VUS) || 50,
-  minMaxVus: parseInt(__ENV.MIN_MAX_VUS) || 20,
-  maxMaxVus: parseInt(__ENV.MAX_MAX_VUS) || 100,
-  rampingStartRateMin: parseInt(__ENV.RAMPING_START_RATE_MIN) || 1,
-  rampingStartRateMax: parseInt(__ENV.RAMPING_START_RATE_MAX) || 5,
-}
 
 // Initialize randomizer with workloadSeed for reproducibility
 randomSeed(config.workloadSeed);
