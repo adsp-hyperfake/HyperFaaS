@@ -1,4 +1,5 @@
-import { isoToMs, callQueuedTimestampKey, gotResponseTimestampKey, instanceIdKey, callQueuedTimestamp, gotResponseTimestamp, instanceIdMetric } from '../script.js'
+import { callQueuedTimestampKey, gotResponseTimestampKey, instanceIdKey, callQueuedTimestamp, gotResponseTimestamp, instanceIdMetric } from '../script.js'
+import { isoToMs } from '../utils.js'
 
 import grpc from 'k6/net/grpc';
 import { check } from 'k6';
@@ -52,7 +53,7 @@ export function bfsFunction(setupData) {
     plaintext: true
   });
 
-  const size = Math.floor(Math.random() * (100 - 100 + 1)) + 100;
+  const size = 100;
 
   // Create input data structure
   const inputData = {

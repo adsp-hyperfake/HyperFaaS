@@ -1,4 +1,5 @@
-import { isoToMs, callQueuedTimestampKey, gotResponseTimestampKey, instanceIdKey, callQueuedTimestamp, gotResponseTimestamp, instanceIdMetric } from '../script.js'
+import { callQueuedTimestampKey, gotResponseTimestampKey, instanceIdKey, callQueuedTimestamp, gotResponseTimestamp, instanceIdMetric } from '../script.js'
+import { getRandomInt, isoToMs } from '../utils.js'
 
 import grpc from 'k6/net/grpc';
 import { check } from 'k6';
@@ -51,8 +52,8 @@ export function thumbnailerFunction(setupData) {
     plaintext: true
   });
   // Create input data structure with random dimensions
-  const width = Math.floor(Math.random() * (200 - 50 + 1)) + 50;  // Random width between 50 and 200
-  const height = Math.floor(Math.random() * (200 - 50 + 1)) + 50; // Random height between 50 and 200
+  const width = getRandomInt(50,200)  // Random width between 50 and 200
+  const height = getRandomInt(50, 200); // Random height between 50 and 200
 
   const inputData = {
     image: imageDataB64,

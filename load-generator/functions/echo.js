@@ -1,4 +1,5 @@
-import { isoToMs, callQueuedTimestampKey, gotResponseTimestampKey, instanceIdKey, callQueuedTimestamp, gotResponseTimestamp, instanceIdMetric } from '../script.js'
+import { callQueuedTimestampKey, gotResponseTimestampKey, instanceIdKey, callQueuedTimestamp, gotResponseTimestamp, instanceIdMetric } from '../script.js'
+import { getRandomInt, isoToMs } from '../utils.js'
 
 import grpc from 'k6/net/grpc';
 import { check } from 'k6';
@@ -47,7 +48,7 @@ export function echoFunction(setupData) {
   client.connect('localhost:50050', {
     plaintext: true
   });
-  const data = encoding.b64encode(randomBytes(Math.floor(Math.random() * (2048 - 512 + 1)) + 512));
+  const data = encoding.b64encode(randomBytes(getRandomInt(512, 2048)));
   const response = client.invoke('leaf.Leaf/ScheduleCall', {
     functionID: { id: echoFunctionId },
     data: data
