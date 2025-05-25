@@ -6,14 +6,6 @@ import { echoConfig, echoSetup, echoFunction } from './functions/echo.js';
 import { thumbnailerConfig, thumbnailerSetup, thumbnailerFunction } from './functions/thumbnailer.js';
 import { getRandomInt, parseK6Duration } from './utils.js';
 
-// Add our custom metrics
-export const callQueuedTimestampKey = 'callqueuedtimestamp';
-export const gotResponseTimestampKey = 'gotresponsetimestamp';
-export const instanceIdKey = 'instanceid';
-export const callQueuedTimestamp = new Trend(callQueuedTimestampKey, true);
-export const gotResponseTimestamp = new Trend(gotResponseTimestampKey, true);
-export const instanceIdMetric = new Trend('instanceid');
-
 // Create global config
 const config = {
   // Global Configuration
@@ -198,5 +190,3 @@ export function handleSummary(data) {
   }
   return {};
 }
-
-// Helper functions

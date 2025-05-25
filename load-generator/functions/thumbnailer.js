@@ -1,4 +1,11 @@
-import { callQueuedTimestampKey, gotResponseTimestampKey, instanceIdKey, callQueuedTimestamp, gotResponseTimestamp, instanceIdMetric } from '../script.js'
+import {
+  callQueuedTimestamp,
+  gotResponseTimestamp,
+  instanceIdMetric,
+  callQueuedTimestampKey,
+  gotResponseTimestampKey,
+  instanceIdKey
+} from '../metrics.js';
 import { getRandomInt, isoToMs } from '../utils.js'
 
 import grpc from 'k6/net/grpc';
