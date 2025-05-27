@@ -19,8 +19,7 @@ import (
 )
 
 const (
-	DB_PATH = "./benchmarks/metrics.db"
-	// DB_PATH        = "../../benchmarks/metrics.db"
+	DB_PATH        = "./benchmarks/metrics.db"
 	STATS_INTERVAL = 1 * time.Second
 )
 
@@ -64,11 +63,13 @@ func initDB(db *sql.DB) error {
 			-- CPU usage
 			-- Units: nanoseconds (Linux)
 			-- Units: 100's of nanoseconds (Windows)
-			cpu_total_usage BIGINT,
+			cpu_usage_total BIGINT,
+			cpu_usage_percent FLOAT,
 
 			-- Memory. Linux
 			memory_usage BIGINT,
-			memory_max_usage BIGINT
+			memory_usage_limit BIGINT,
+			memory_usage_percent FLOAT
 		)
 	`)
 	if err != nil {
@@ -208,21 +209,91 @@ func queryStats(ctx context.Context, cli *client.Client, containerID string) (*c
 }
 
 func saveStats(db *sql.DB, s *container.StatsResponse, functionID string, containerID string) error {
+	mem := calculateMemUsageUnixNoCache(s.MemoryStats)
+	memLimit := float64(s.MemoryStats.Limit)
+	memPercent := calculateMemPercentUnixNoCache(memLimit, mem)
+
+	previousCPU := s.PreCPUStats.CPUUsage.TotalUsage
+	previousSystem := s.PreCPUStats.SystemUsage
+	cpuPercent := calculateCPUPercent(previousCPU, previousSystem, s)
+
 	_, err := db.Exec(`
 		INSERT INTO cpu_mem_stats (
 			instance_id, function_id, timestamp,
 
-			cpu_total_usage,
+			cpu_usage_total,
+			cpu_usage_percent,
 
-			memory_usage, memory_max_usage
-		) VALUES (?, ?, ?, ?, ?, ?)`,
+			memory_usage,
+			memory_usage_limit,
+			memory_usage_percent
+		) VALUES (?, ?, ?,
+		 		  ?, ?, 
+				  ?, ?, ?)`,
 		containerID,
 		functionID,
 		s.Read,
 		s.CPUStats.CPUUsage.TotalUsage,
-		s.MemoryStats.Usage,
-		s.MemoryStats.MaxUsage,
+		cpuPercent,
+		mem,
+		memLimit,
+		memPercent,
 	)
 
 	return err
+}
+
+// calculateCPUPercentLinux calculates the average CPU usage percent over the last interval.
+// inspired by https://github.com/docker/cli/blob/28.x/cli/command/container/stats_helpers.go
+func calculateCPUPercent(previousCPU, previousSystem uint64, s *container.StatsResponse) float64 {
+	var (
+		cpuPercent = 0.0
+		// calculate the change for the cpu usage of the container in between readings
+		cpuDelta = float64(s.CPUStats.CPUUsage.TotalUsage) - float64(previousCPU)
+		// calculate the change for the entire system between readings
+		systemDelta = float64(s.CPUStats.SystemUsage) - float64(previousSystem)
+		onlineCPUs  = float64(s.CPUStats.OnlineCPUs)
+	)
+
+	if onlineCPUs == 0.0 {
+		onlineCPUs = float64(len(s.CPUStats.CPUUsage.PercpuUsage))
+	}
+	if systemDelta > 0.0 && cpuDelta > 0.0 {
+		cpuPercent = (cpuDelta / systemDelta) * onlineCPUs * 100.0
+	}
+	return cpuPercent
+}
+
+// Taken from from dcoker-cli
+// calculateMemUsageUnixNoCache calculate memory usage of the container.
+// Cache is intentionally excluded to avoid misinterpretation of the output.
+//
+// On cgroup v1 host, the result is `mem.Usage - mem.Stats["total_inactive_file"]` .
+// On cgroup v2 host, the result is `mem.Usage - mem.Stats["inactive_file"] `.
+//
+// This definition is consistent with cadvisor and containerd/CRI.
+// * https://github.com/google/cadvisor/commit/307d1b1cb320fef66fab02db749f07a459245451
+// * https://github.com/containerd/cri/commit/6b8846cdf8b8c98c1d965313d66bc8489166059a
+//
+// On Docker 19.03 and older, the result was `mem.Usage - mem.Stats["cache"]`.
+// See https://github.com/moby/moby/issues/40727 for the background.
+func calculateMemUsageUnixNoCache(mem container.MemoryStats) float64 {
+	// cgroup v1
+	if v, isCgroup1 := mem.Stats["total_inactive_file"]; isCgroup1 && v < mem.Usage {
+		return float64(mem.Usage - v)
+	}
+	// cgroup v2
+	if v := mem.Stats["inactive_file"]; v < mem.Usage {
+		return float64(mem.Usage - v)
+	}
+	return float64(mem.Usage)
+}
+
+func calculateMemPercentUnixNoCache(limit float64, usedNoCache float64) float64 {
+	// MemoryStats.Limit will never be 0 unless the container is not running and we haven't
+	// got any data from cgroup
+	if limit != 0 {
+		return usedNoCache / limit * 100.0
+	}
+	return 0
 }
