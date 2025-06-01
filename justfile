@@ -121,7 +121,7 @@ load-test:
     go run ./tests/leaf/main.go
 
 metrics-analyse:
-    cd benchmarks && uv run analyse.py
+    cd benchmarks && uv run analyse.py --scenarios-path ../load-generator/generated_scenarios.json
 
 ############################
 # Misc. Stuff

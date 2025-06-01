@@ -8,7 +8,9 @@ import {
   leafGotRequestTimestamp,
   leafScheduledCallTimestamp,
   leafGotRequestTimestampKey,
-  leafScheduledCallTimestampKey
+  leafScheduledCallTimestampKey,
+  timeout,
+  functionTimeout
 } from '../metrics.js';
 import { getRandomInt, isoToMs } from '../utils.js'
 
@@ -77,8 +79,16 @@ export function thumbnailerFunction(setupData) {
 
   const response = client.invoke('leaf.Leaf/ScheduleCall', {
     functionID: { id: thumbnailerFunctionId },
-    data: data
-  });
+    data: data,
+  },
+  {
+    timeout: functionTimeout
+  }
+);
+  if (response.status === grpc.StatusDeadlineExceeded) {
+    timeout.add(1);
+    return;
+  }
   if (response.error) {
     console.log('Error scheduling Thumbnailer function:', response.error);
     return;

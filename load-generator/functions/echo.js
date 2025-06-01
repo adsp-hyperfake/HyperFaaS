@@ -8,7 +8,9 @@ import {
   leafGotRequestTimestamp,
   leafScheduledCallTimestamp,
   leafGotRequestTimestampKey,
-  leafScheduledCallTimestampKey
+  leafScheduledCallTimestampKey,
+  timeout,
+  functionTimeout
 } from '../metrics.js';
 import { getRandomInt, isoToMs } from '../utils.js'
 
@@ -62,8 +64,16 @@ export function echoFunction(setupData) {
   const data = encoding.b64encode(randomBytes(getRandomInt(512, 2048)));
   const response = client.invoke('leaf.Leaf/ScheduleCall', {
     functionID: { id: echoFunctionId },
-    data: data
-  });
+    data: data,
+  },
+  {
+    timeout: functionTimeout
+  }
+);
+  if (response.status === grpc.StatusDeadlineExceeded) {
+    timeout.add(1);
+    return;
+  }
   if (response.error) {
     console.log('Error scheduling Echo function:', response.error);
     return;

@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
+import json
 
 IMAGE_PALETTE = {
     "hyperfaas-bfs-json:latest": "blue",
@@ -24,7 +25,7 @@ def prepare_dataframe(df: pd.DataFrame, use_gotresponsetimestamp=True):
     df['gotresponsetimestamp'] = pd.to_datetime(df['gotresponsetimestamp'], unit='ns')
     # Add latency
     df['scheduling_latency_ms'] = (df['leafscheduledcalltimestamp'] - df['leafgotrequesttimestamp']).dt.total_seconds() * 1000
-    df['lead_to_worker_latency_ms'] = (df['callqueuedtimestamp'] - df['leafscheduledcalltimestamp']).dt.total_seconds() * 1000
+    df['leaf_to_worker_latency_ms'] = (df['callqueuedtimestamp'] - df['leafscheduledcalltimestamp']).dt.total_seconds() * 1000
     df['function_processing_latency_ms'] = (df['gotresponsetimestamp'] - df['callqueuedtimestamp']).dt.total_seconds() * 1000
     return df
 
@@ -183,13 +184,13 @@ def plot_decomposed_latency(df: pd.DataFrame):
     df['function_processing_ms'] = pd.to_timedelta(df['functionprocessingtime']).dt.total_seconds() * 1000
     
     # Remove rows with missing data
-    df = df.dropna(subset=['scheduling_latency_ms', 'lead_to_worker_latency_ms', 'function_processing_latency_ms', 'image_tag'])
+    df = df.dropna(subset=['scheduling_latency_ms', 'leaf_to_worker_latency_ms', 'function_processing_latency_ms', 'image_tag'])
     
     import seaborn.objects as so
     
     df_melted = df.melt(
         id_vars=['image_tag'], 
-        value_vars=['scheduling_latency_ms', 'lead_to_worker_latency_ms', 'function_processing_latency_ms'],
+        value_vars=['scheduling_latency_ms', 'leaf_to_worker_latency_ms', 'function_processing_latency_ms'],
         var_name='latency_type', 
         value_name='latency_ms'
     )
@@ -205,3 +206,44 @@ def plot_decomposed_latency(df: pd.DataFrame):
         )
         .show()
     )
+
+def plot_expected_rps(df: pd.DataFrame, scenarios_path: str = None):
+    """Plot expected RPS over time for each function image."""
+    if df.empty:
+        print("No data to plot")
+        return
+    
+    plt.figure(figsize=(15, 8))
+    
+    # Create the plot for individual functions
+    sns.lineplot(data=df, x='second', y='expected_rps', hue='image_tag', 
+                marker='o', markersize=4, palette=IMAGE_PALETTE)
+    
+    # Add total RPS line
+    total_rps = df.groupby('second')['expected_rps'].sum().reset_index()
+    sns.lineplot(data=total_rps, x='second', y='expected_rps', 
+                color='black', linestyle='--', label='Total RPS',
+                linewidth=2)
+    
+    plt.title('Expected Request Rate Over Time (from k6 Scenarios)', fontsize=14, fontweight='bold')
+    plt.xlabel('Time (seconds)', fontsize=12)
+    plt.ylabel('Expected Requests Per Second', fontsize=12)
+    plt.grid(True, alpha=0.3)
+    plt.legend(title='Function Image', bbox_to_anchor=(1.05, 1), loc='upper left')
+    
+    # Add scenario information as subtitle if path provided
+    if scenarios_path:
+        with open(scenarios_path, 'r') as f:
+            metadata = json.load(f)['metadata']
+        plt.suptitle(f"Total Duration: {metadata['totalDuration']}, Seed: {metadata['seed']}", 
+                    fontsize=10, y=0.98)
+    
+    plt.tight_layout()
+    plt.show()
+    
+    # Print summary statistics
+    print("\nExpected RPS Summary by Image Tag:")
+    summary = df.groupby('image_tag')['expected_rps'].agg(['mean', 'max', 'sum']).round(2)
+    summary.columns = ['avg_rps', 'peak_rps', 'total_requests']
+    print(summary)
+    print(f"\nTotal expected requests across all functions: {df['expected_rps'].sum():.0f}")

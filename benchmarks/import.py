@@ -25,6 +25,7 @@ def create_tables(conn):
         functionprocessingtime REAL,
         leafgotrequesttimestamp REAL,
         leafscheduledcalltimestamp REAL,
+        timeout BOOLEAN,
         
         -- Data metrics
         data_sent REAL,
@@ -168,7 +169,8 @@ def import_csv_to_sqlite(csv_file='test_results.csv', db_file='metrics.db', json
                 requests[request_key]['leafgotrequesttimestamp'] = row['metric_value']
             elif row['metric_name'] == 'leafscheduledcalltimestamp':
                 requests[request_key]['leafscheduledcalltimestamp'] = row['metric_value']
-    
+            elif row['metric_name'] == 'timeout':
+                requests[request_key]['timeout'] = bool(float(row['metric_value']) > 0.5)
     # insert collected requests into the database
     for request_key, data in requests.items():
             
@@ -178,8 +180,8 @@ def import_csv_to_sqlite(csv_file='test_results.csv', db_file='metrics.db', json
             grpc_req_duration, callqueuedtimestamp, gotresponsetimestamp, functionprocessingtime,
             leafgotrequesttimestamp, leafscheduledcalltimestamp,
             data_sent, data_received, iteration_duration,
-            proto, subproto, group_name, extra_tags
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            proto, subproto, group_name, extra_tags, timeout
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             data.get('timestamp'),
             data.get('scenario'),
@@ -200,6 +202,7 @@ def import_csv_to_sqlite(csv_file='test_results.csv', db_file='metrics.db', json
             data.get('subproto'),
             data.get('group_name'),
             data.get('extra_tags'),
+            data.get('timeout'),
         ))
     
     conn.commit()
