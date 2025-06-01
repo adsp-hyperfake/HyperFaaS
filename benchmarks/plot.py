@@ -1,5 +1,4 @@
 import pandas as pd
-import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 import json
@@ -28,57 +27,6 @@ def prepare_dataframe(df: pd.DataFrame, use_gotresponsetimestamp=True):
     df['leaf_to_worker_latency_ms'] = (df['callqueuedtimestamp'] - df['leafscheduledcalltimestamp']).dt.total_seconds() * 1000
     df['function_processing_latency_ms'] = (df['gotresponsetimestamp'] - df['callqueuedtimestamp']).dt.total_seconds() * 1000
     return df
-
-# This function is not working as intended. But it makes sense: most requests are processed super quickly.
-# This means that for the way the calculation is done, the number of inflight requests is super low.
-def plot_inflight_requests(df: pd.DataFrame):
-    # Debug: Check raw timestamp values before conversion
-    print("Sample raw callqueuedtimestamp values:")
-    print(df['callqueuedtimestamp'].head())
-    print(f"Min raw timestamp: {df['callqueuedtimestamp'].min()}")
-    print(f"Max raw timestamp: {df['callqueuedtimestamp'].max()}")
-    
-    # Prepare dataframe
-    df = prepare_dataframe(df, use_gotresponsetimestamp=True)
-    
-    # Debug: Print actual time range
-    raw_start = df['callqueuedtimestamp'].min()
-    raw_end = df['gotresponsetimestamp'].max()
-    print(f"Processed start time: {raw_start}")
-    print(f"Processed end time: {raw_end}")
-    print(f"Time difference: {raw_end - raw_start}")
-    
-    # Define time range per second
-    start_time = df['callqueuedtimestamp'].min().floor('s')
-    end_time = df['gotresponsetimestamp'].max().ceil('s')
-    
-    print(f"Floored start time: {start_time}")
-    print(f"Ceiled end time: {end_time}")
-    print(f"Expected duration: {end_time - start_time}")
-    
-    # Create time range - should be reasonable for your test duration
-    time_range = pd.date_range(start=start_time, end=end_time, freq='s')
-    print(f"Time range length: {len(time_range)} seconds")
-    
-    # Count in-flight requests per second
-    inflight_counts = [
-        ((df['callqueuedtimestamp'] <= t) &
-         (df['gotresponsetimestamp'] > t)).sum()
-        for t in time_range
-    ]
-    
-    # Create and plot the series
-    series = pd.Series(inflight_counts, index=time_range, name='inflight_rps')
-    print("\n Time Series: \n")
-    print(series)
-    
-    plt.figure(figsize=(12, 5))
-    sns.lineplot(x=series.index, y=series.values)
-    plt.title("In-Flight Requests Per Second")
-    plt.xlabel("Time")
-    plt.ylabel("Number of In-Flight Requests")
-    plt.tight_layout()
-    plt.show()
 
 def plot_requests_processed_per_second(df: pd.DataFrame):
     """Plot the number of requests that completed processing per second"""

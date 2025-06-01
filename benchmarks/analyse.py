@@ -1,12 +1,9 @@
 import sqlite3
 import pandas as pd
 from tabulate import tabulate
-import numpy as np
 import argparse
 import sys
 import json
-import matplotlib.pyplot as plt
-import seaborn as sns
 from plot import *
 
 metrics = None
