@@ -65,8 +65,8 @@ class Function():
                 self.is_cold = False
                 self.status_signal.send(self, update=StatusUpdate(
                     instance_id=InstanceID(id=self.instance_id),
-                    event=Event.EVENT_RUNNING,
-                    status=Status.STATUS_SUCCESS,
+                    event=Event.Value("EVENT_RUNNING"),
+                    status=Status.Value("STATUS_SUCCESS"),
                     function_id=FunctionID(id=self.function_id),
                     timestamp=get_timestamp()
                 ))
@@ -76,7 +76,7 @@ class Function():
             if timeout:
                 self.status_signal.send(self, update=StatusUpdate(
                     instance_id=InstanceID(id=self.instance_id),
-                    event=Event.EVENT_TIMEOUT,
+                    event=Event.Value("EVENT_TIMEOUT"),
                     function_id=FunctionID(id=self.function_id),
                 ))
             self.last_worked_at = int(datetime.datetime.now().timestamp())
