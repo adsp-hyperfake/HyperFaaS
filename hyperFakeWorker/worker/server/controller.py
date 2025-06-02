@@ -24,7 +24,7 @@ class ControllerServicer(controller_pb2_grpc.ControllerServicer):
             self._fn_mngr.send_status_update(
                 StatusUpdate(
                     instance_id=InstanceID(id=new_function.instance_id),
-                    event=Event.EVENT_START,
+                    event=Event.Value("EVENT_START"),
                     status=Status.STATUS_SUCCESS,
                     function_id=FunctionID(id=new_function.function_id),
                 )
@@ -41,8 +41,8 @@ class ControllerServicer(controller_pb2_grpc.ControllerServicer):
                 self._fn_mngr.send_status_update(
                     StatusUpdate(
                         instance_id=InstanceID(id=func.instance_id),
-                        event=Event.EVENT_RESPONSE,
-                        status=Status.STATUS_SUCCESS,
+                        event=Event.Value("EVENT_RESPONSE"),
+                        status=Status.Value("STATUS_SUCCESS"),
                         function_id=FunctionID(id=func.function_id),
                     )
                 )
@@ -50,7 +50,7 @@ class ControllerServicer(controller_pb2_grpc.ControllerServicer):
                 self._fn_mngr.send_status_update(
                     StatusUpdate(
                         instance_id=InstanceID(id=func.instance_id),
-                        event=Event.EVENT_DOWN,
+                        event=Event.Value("EVENT_DOWN"),
                         function_id=FunctionID(id=func.function_id),
                     )
                 )
@@ -72,7 +72,7 @@ class ControllerServicer(controller_pb2_grpc.ControllerServicer):
         self._fn_mngr.send_status_update(
             StatusUpdate(
                 instance_id=InstanceID(id=func.instance_id),
-                event=Event.EVENT_STOP,
+                event=Event.Value("EVENT_STOP"),
                 status=Status.STATUS_SUCCESS,
                 timestamp=get_timestamp()
             )
@@ -83,7 +83,7 @@ class ControllerServicer(controller_pb2_grpc.ControllerServicer):
     def Status(self, request: StatusRequest, context: grpc.ServicerContext):
         # Collect functions...
         for update in self._fn_mngr.get_status_updates():
-            logger.debug(f"Sent Status update {update}")
+            logger.debug(f"Sent Status update:\nFunction: {update.function_id}\nInstance: {update.instance_id}\nEvent: {update.event.__str__()}\nStatus: {update.status.__str__()}\ntime: {update.timestamp.__str__()}")
             yield update
     
     def Metrics(self, request: MetricsRequest, context: grpc.ServicerContext):
