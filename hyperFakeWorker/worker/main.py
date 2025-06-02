@@ -1,5 +1,5 @@
 #!/bin/python
-from ._grpc import add_proto_definitions
+from .api import add_proto_definitions
 add_proto_definitions()
 
 import click
@@ -17,8 +17,8 @@ def server():
 @main.command()
 def client():
     import grpc
-    from ._grpc.controller.controller_pb2_grpc import ControllerStub
-    from ._grpc.controller.controller_pb2 import StatusRequest
+    from .api.controller.controller_pb2_grpc import ControllerStub
+    from .api.controller.controller_pb2 import StatusRequest
     channel = grpc.insecure_channel("localhost:50051")
     stub = ControllerStub(channel)
 
