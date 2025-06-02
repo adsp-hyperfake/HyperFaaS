@@ -14,5 +14,6 @@ export const instanceIdMetric = new Trend(instanceIdKey);
 export const leafGotRequestTimestamp = new Trend(leafGotRequestTimestampKey, true);
 export const leafScheduledCallTimestamp = new Trend(leafScheduledCallTimestampKey, true);
 export const functionProcessingTime = new Trend(functionProcessingTimeKey);
-export const timeout = new Trend("timeout");
+export const timeout = new Trend("timeout", true);
+export const error = new Trend("error", true);
 // for some reason if we use a function the metrics are not exported, so don't try it..

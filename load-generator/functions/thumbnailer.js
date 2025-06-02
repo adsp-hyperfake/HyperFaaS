@@ -10,10 +10,9 @@ import {
   leafGotRequestTimestampKey,
   leafScheduledCallTimestampKey,
   timeout,
-  functionTimeout
+  error
 } from '../metrics.js';
 import { getRandomInt, isoToMs } from '../utils.js'
-
 import grpc from 'k6/net/grpc';
 import { check } from 'k6';
 import encoding from 'k6/encoding';
@@ -82,15 +81,15 @@ export function thumbnailerFunction(setupData) {
     data: data,
   },
   {
-    timeout: functionTimeout
+    timeout: setupData.timeout
   }
 );
   if (response.status === grpc.StatusDeadlineExceeded) {
-    timeout.add(1);
+    timeout.add(Date.now());
     return;
   }
   if (response.error) {
-    console.log('Error scheduling Thumbnailer function:', response.error);
+    error.add(Date.now());
     return;
   }
   callQueuedTimestamp.add(isoToMs(response.trailers[callQueuedTimestampKey]));

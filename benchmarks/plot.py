@@ -9,125 +9,85 @@ IMAGE_PALETTE = {
     "hyperfaas-thumbnailer-json:latest": "green",
 }
 
-def prepare_dataframe(df: pd.DataFrame, use_gotresponsetimestamp=True):
-    """Helper function to prepare dataframe with timestamp conversions"""
-    # Drop rows with missing required values
-    if use_gotresponsetimestamp:
-        df = df[df['callqueuedtimestamp'].notna() & df['gotresponsetimestamp'].notna()].copy()
-    else:
-        df = df[df['callqueuedtimestamp'].notna() & df['functionprocessingtime'].notna()].copy()
+def plot_throughput_leaf_node(df: pd.DataFrame):
+    """Plot the number of requests that completed processing per second at the leaf node level.
+    We use requests fully completed as the basis for throughput here.
+    """
+    print("Plotting requests processed per second at the leaf node level...")
     
-    # Convert timestamps from nanoseconds to datetime
-    df['callqueuedtimestamp'] = pd.to_datetime(df['callqueuedtimestamp'], unit='ns')
-    df['leafgotrequesttimestamp'] = pd.to_datetime(df['leafgotrequesttimestamp'], unit='ns')
-    df['leafscheduledcalltimestamp'] = pd.to_datetime(df['leafscheduledcalltimestamp'], unit='ns')
-    df['gotresponsetimestamp'] = pd.to_datetime(df['gotresponsetimestamp'], unit='ns')
-    # Add latency
-    df['scheduling_latency_ms'] = (df['leafscheduledcalltimestamp'] - df['leafgotrequesttimestamp']).dt.total_seconds() * 1000
-    df['leaf_to_worker_latency_ms'] = (df['callqueuedtimestamp'] - df['leafscheduledcalltimestamp']).dt.total_seconds() * 1000
-    df['function_processing_latency_ms'] = (df['gotresponsetimestamp'] - df['callqueuedtimestamp']).dt.total_seconds() * 1000
-    return df
-
-def plot_requests_processed_per_second(df: pd.DataFrame):
-    """Plot the number of requests that completed processing per second"""
-    print("Plotting requests processed per second...")
-    
-    # Prepare dataframe
-    df = prepare_dataframe(df, use_gotresponsetimestamp=True)
-    
-    # Debug: Print actual time range
-    raw_start = df['callqueuedtimestamp'].min()
-    raw_end = df['gotresponsetimestamp'].max()
-    print(f"Processed start time: {raw_start}")
-    print(f"Processed end time: {raw_end}")
-    print(f"Time difference: {raw_end - raw_start}")
-    print(f"Total requests: {len(df)}")
-    
-    # Define time range per second based on when requests completed
-    start_time = df['gotresponsetimestamp'].min().floor('s')
-    end_time = df['gotresponsetimestamp'].max().ceil('s')
-    
-    print(f"Floored start time: {start_time}")
-    print(f"Ceiled end time: {end_time}")
-    print(f"Expected duration: {end_time - start_time}")
-    
-    # Create time range
-    time_range = pd.date_range(start=start_time, end=end_time, freq='s')
-    print(f"Time range length: {len(time_range)} seconds")
-    
-    # Count requests that completed in each second
-    processed_counts = [
-        ((df['gotresponsetimestamp'] > t) & (df['gotresponsetimestamp'] <= t + pd.Timedelta(seconds=1))).sum()
-        for t in time_range
-    ]
-    
-    # Create and plot the series
-    series = pd.Series(processed_counts, index=time_range, name='processed_rps')
-    print(f"\nProcessed requests stats:")
-    print(f"Min: {series.min()}, Max: {series.max()}, Mean: {series.mean():.2f}")
-    print(f"Total processed: {series.sum()}")
-    
-    plt.figure(figsize=(12, 5))
-    sns.lineplot(x=series.index, y=series.values)
-    plt.title("Requests Processed Per Second")
-    plt.xlabel("Time")
-    plt.ylabel("Number of Requests Completed")
-    plt.tight_layout()
-    plt.show()
-
-def plot_throughput_vs_latency_over_time(df: pd.DataFrame):
-    """Plot requests processed per second and latency over time in stacked subplots"""
-    print("Plotting throughput vs latency over time...")
-    
-    # Prepare dataframe
-    df = prepare_dataframe(df, use_gotresponsetimestamp=True)
-    
-    # Calculate requests processed per second
-    start_time = df['gotresponsetimestamp'].min().floor('s')
-    end_time = df['gotresponsetimestamp'].max().ceil('s')
+    # Define time range based on timestamps
+    start_time = df['timestamp'].min().floor('s')
+    end_time = df['timestamp'].max().ceil('s')
     time_range = pd.date_range(start=start_time, end=end_time, freq='s')
     
-    processed_counts = [
-        ((df['gotresponsetimestamp'] > t) & (df['gotresponsetimestamp'] <= t + pd.Timedelta(seconds=1))).sum()
-        for t in time_range
-    ]
+    print(f"Time range: {start_time} to {end_time}")
+    print(f"Duration: {end_time - start_time}")
     
-    throughput_series = pd.Series(processed_counts, index=time_range, name='processed_rps')
+    successful_counts = []
+    timeout_counts = []
+    error_counts = []
     
-    # Create stacked subplots
+    for t in time_range:
+        requests_in_window = (df['timestamp'] >= t) & (df['timestamp'] < t + pd.Timedelta(seconds=1))
+        
+        successful_counts.append((requests_in_window & df['grpc_req_duration'].notna()).sum())
+        timeout_counts.append((requests_in_window & df['timeout'].notna()).sum())
+        error_counts.append((requests_in_window & df['error'].notna()).sum())
+    
+    plot_data = pd.DataFrame({
+        'time': time_range,
+        'successful': successful_counts,
+        'timeout': timeout_counts,
+        'error': error_counts
+    })
+    
+    plot_data['total'] = plot_data['successful'] + plot_data['timeout'] + plot_data['error']
+    
+    total_successful = df['grpc_req_duration'].notna().sum()
+    total_timeouts = df['timeout'].notna().sum()
+    total_errors = df['error'].notna().sum()
+    total_requests = len(df) 
+    if total_requests > 0:
+        print(f"Success rate: {total_successful / total_requests * 100:.1f}%")
+        print(f"Timeout rate: {total_timeouts / total_requests * 100:.1f}%")
+        print(f"Error rate: {total_errors / total_requests * 100:.1f}%")
+    
+    # 2 plots in 1
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 10), sharex=True)
     
-    # Top plot: Requests processed per second
-    sns.lineplot(x=throughput_series.index, y=throughput_series.values, ax=ax1)
-    ax1.set_title("Requests Processed Per Second")
-    ax1.set_ylabel("Requests/Second")
-    ax1.grid(True, alpha=0.3)
+    ax1.fill_between(plot_data['time'], 0, plot_data['successful'], 
+                     label='Successful', color='green', alpha=0.7)
+    ax1.fill_between(plot_data['time'], plot_data['successful'], 
+                     plot_data['successful'] + plot_data['timeout'],
+                     label='Timeout', color='orange', alpha=0.7)
+    ax1.fill_between(plot_data['time'], plot_data['successful'] + plot_data['timeout'],
+                     plot_data['total'],
+                     label='Error', color='red', alpha=0.7)
     
-    # Bottom plot: Latency scatter plot
-    df['latency'] = df['grpc_req_duration']
-    sns.scatterplot(data=df, x='callqueuedtimestamp', y='latency', hue='image_tag', 
-                   palette=IMAGE_PALETTE, alpha=0.6, ax=ax2)
-    ax2.set_title("Request Latency Over Time")
-    ax2.set_xlabel("Time")
-    ax2.set_ylabel("Latency (ms)")
+    ax1.plot(plot_data['time'], plot_data['total'], 
+             color='black', linestyle='-', linewidth=2, label='Total Requests')
+    
+    ax1.set_title('Leaf Node Throughput: Successful Requests, Timeouts, and Errors Over Time', 
+                  fontsize=14, fontweight='bold')
+    ax1.set_ylabel('Requests Per Second', fontsize=12)
+    ax1.legend(loc='upper right')
+    ax1.grid(True, alpha=0.3)
+ 
+    successful_df = df[df['grpc_req_duration'].notna()].copy()
+    if not successful_df.empty:
+        sns.scatterplot(data=successful_df, x='timestamp', y='grpc_req_duration', 
+                       hue='image_tag', palette=IMAGE_PALETTE, alpha=0.6, ax=ax2)
+    ax2.set_title("Request Latency Over Time (Successful Requests Only)", fontsize=14, fontweight='bold')
+    ax2.set_xlabel('Time', fontsize=12)
+    ax2.set_ylabel('Latency (ms)', fontsize=12)
     ax2.grid(True, alpha=0.3)
     
     plt.tight_layout()
     plt.show()
-    
-    # Print correlation info
-    print(f"\nThroughput Statistics:")
-    print(f"Mean RPS: {throughput_series.mean():.2f}")
-    print(f"Max RPS: {throughput_series.max()}")
-    print(f"Min RPS: {throughput_series.min()}")
 
 def plot_decomposed_latency(df: pd.DataFrame):
     """Plot the source of latency of requests decomposed by image tag"""
     print("Plotting decomposed latency...")
-    
-    # Prepare dataframe
-    df = prepare_dataframe(df, use_gotresponsetimestamp=True)
-    
     # Function processing time (from the function execution itself)
     df['function_processing_ms'] = pd.to_timedelta(df['functionprocessingtime']).dt.total_seconds() * 1000
     

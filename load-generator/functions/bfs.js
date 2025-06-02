@@ -10,7 +10,7 @@ import {
   leafGotRequestTimestampKey,
   leafScheduledCallTimestampKey,
   timeout,
-  functionTimeout
+  error
 } from '../metrics.js';
 import { isoToMs } from '../utils.js'
 
@@ -83,17 +83,17 @@ export function bfsFunction(setupData) {
     data: data,
   },
   {
-    timeout: functionTimeout
+    timeout: setupData.timeout
   }
 );
 
   if (response.status === grpc.StatusDeadlineExceeded) {
-    timeout.add(1);
+    timeout.add(Date.now());
     return;
   }
 
   if (response.error) {
-    console.log('Error scheduling BFS function:', response.error);
+    error.add(Date.now());
     return;
   }
   callQueuedTimestamp.add(isoToMs(response.trailers[callQueuedTimestampKey]));

@@ -122,6 +122,8 @@ load-test:
 
 metrics-analyse:
     cd benchmarks && uv run analyse.py --scenarios-path ../load-generator/generated_scenarios.json
+metrics-plot:
+    cd benchmarks && uv run analyse.py --scenarios-path ../load-generator/generated_scenarios.json --plot true
 
 ############################
 # Misc. Stuff

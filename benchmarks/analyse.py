@@ -62,9 +62,37 @@ def get_metrics(db_path: str) -> pd.DataFrame:
     
     df = pd.read_sql_query(query, conn)
     conn.close()
+    df['callqueuedtimestamp'] = pd.to_datetime(df['callqueuedtimestamp'], unit='ns')
+    df['leafgotrequesttimestamp'] = pd.to_datetime(df['leafgotrequesttimestamp'], unit='ns')
+    df['leafscheduledcalltimestamp'] = pd.to_datetime(df['leafscheduledcalltimestamp'], unit='ns')
+    df['gotresponsetimestamp'] = pd.to_datetime(df['gotresponsetimestamp'], unit='ns')
+    
+    # Manual workaround for pandas datetime conversion bug with NaN values
+    #https://github.com/pandas-dev/pandas/pull/61022
+    #https://github.com/pandas-dev/pandas/issues/58419
+    # Convert timeout column
+    timeout_series = df['timeout']
+    timeout_valid_mask = timeout_series.notna()
+    timeout_result = pd.Series(index=timeout_series.index, dtype='datetime64[ns]')
+    if timeout_valid_mask.any():
+        timeout_result.loc[timeout_valid_mask] = pd.to_datetime(timeout_series[timeout_valid_mask], unit='ms')
+    df['timeout'] = timeout_result
+    
+    # Convert error column  
+    error_series = df['error']
+    error_valid_mask = error_series.notna()
+    error_result = pd.Series(index=error_series.index, dtype='datetime64[ns]')
+    if error_valid_mask.any():
+        error_result.loc[error_valid_mask] = pd.to_datetime(error_series[error_valid_mask], unit='ms')
+    df['error'] = error_result
+    
+    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
+    # Add latency
+    df['scheduling_latency_ms'] = (df['leafscheduledcalltimestamp'] - df['leafgotrequesttimestamp']).dt.total_seconds() * 1000
+    df['leaf_to_worker_latency_ms'] = (df['callqueuedtimestamp'] - df['leafscheduledcalltimestamp']).dt.total_seconds() * 1000
+    df['function_processing_latency_ms'] = (df['gotresponsetimestamp'] - df['callqueuedtimestamp']).dt.total_seconds() * 1000
     metrics = df
     return df
-    
     
 def get_function_summary(db_path: str) -> pd.DataFrame:
     """Get summary statistics for each function."""
@@ -101,10 +129,15 @@ def print_request_latency(db_path: str):
     print("\n")
 
     print("Total timeout requests by image tag: \n")
-    print(metrics.groupby(['image_tag'])['timeout'].sum())
-    print("Total timeouts:\n")
-    print(metrics['timeout'].sum())
-    
+    print(metrics.groupby(['image_tag'])['timeout'].count())
+    print("Total timeouts:")
+    print(metrics['timeout'].count())
+
+    print("Total errors by image tag: \n")
+    print("Note: these errors are LeafNode/Worker errors, not function errors")
+    print(metrics.groupby(['image_tag'])['error'].count())
+    print("Total errors:")
+    print(metrics['error'].count())
 
     print("Request Latency by Scenario and Image Tag: \n")
     # Filter for grpc_req_duration metrics and calculate latency percentiles
@@ -168,14 +201,10 @@ def print_cold_start_metrics(db_path: str):
     print("\n Total Request latency for those cold starts: \n")
     print(total_request_latency)
 
-
-    
-
 def print_cold_start_times(db_path: str):
     df = get_cold_start_times(db_path)
     print("\nCold Start Times by Instance:")
     print(tabulate(df, headers='keys', tablefmt='psql', showindex=False))
-
 
 def print_function_summary(db_path: str):
     df = get_function_summary(db_path)
@@ -296,19 +325,22 @@ def main():
                         help='Path to SQLite database')
     parser.add_argument('--scenarios-path', 
                         help='Path to k6 scenarios JSON file (optional)')
+    parser.add_argument('--plot', help='Plot the metrics', default=False)
     args = parser.parse_args()
 
     try:
         print_request_latency(args.db_path)
         print_data_transfer(args.db_path)
         #print_cold_start_metrics(args.db_path)
-        plot_requests_processed_per_second(metrics)
-        plot_throughput_vs_latency_over_time(metrics)
-        plot_decomposed_latency(metrics)
+        if args.plot:
+            plot_throughput_leaf_node(metrics)
+            #plot_requests_processed_per_second(metrics)
+            #plot_throughput_vs_latency_over_time(metrics)
+            plot_decomposed_latency(metrics)
         
-        if args.scenarios_path:
-            scenarios_df = analyze_k6_scenarios(args.scenarios_path)
-            plot_expected_rps(scenarios_df, args.scenarios_path)
+            if args.scenarios_path:
+                    scenarios_df = analyze_k6_scenarios(args.scenarios_path)
+                    plot_expected_rps(scenarios_df, args.scenarios_path)
             
     except sqlite3.OperationalError as e:
         print(f"Error accessing database: {e}", file=sys.stderr)
