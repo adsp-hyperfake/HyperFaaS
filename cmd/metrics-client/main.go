@@ -57,7 +57,7 @@ func initDB(db *sql.DB) error {
 		CREATE TABLE IF NOT EXISTS cpu_mem_stats (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			instance_id TEXT NOT NULL,
-			function_id TEXT NOT NULL,
+			function_id TEXT,
 			timestamp DATETIME NOT NULL,
 
 			-- CPU usage
@@ -176,7 +176,7 @@ func collectMetrics(db *sql.DB) {
 					log.Printf("error: failed to get stats for container %v: %v", c.ID, err)
 					return
 				}
-				if err := saveStats(db, stats, c.ImageID, c.ID); err != nil {
+				if err := saveStats(db, stats, c.ID); err != nil {
 					log.Printf("error: couldn't save the stats: %v\n", err)
 				}
 			}(cli, db, c)
@@ -208,7 +208,7 @@ func queryStats(ctx context.Context, cli *client.Client, containerID string) (*c
 	return &s, nil
 }
 
-func saveStats(db *sql.DB, s *container.StatsResponse, functionID string, containerID string) error {
+func saveStats(db *sql.DB, s *container.StatsResponse, containerID string) error {
 	mem := calculateMemUsageUnixNoCache(s.MemoryStats)
 	memLimit := float64(s.MemoryStats.Limit)
 	memPercent := calculateMemPercentUnixNoCache(memLimit, mem)
@@ -216,6 +216,8 @@ func saveStats(db *sql.DB, s *container.StatsResponse, functionID string, contai
 	previousCPU := s.PreCPUStats.CPUUsage.TotalUsage
 	previousSystem := s.PreCPUStats.SystemUsage
 	cpuPercent := calculateCPUPercent(previousCPU, previousSystem, s)
+
+	instanceID := containerID[:12]
 
 	_, err := db.Exec(`
 		INSERT INTO cpu_mem_stats (
@@ -230,8 +232,8 @@ func saveStats(db *sql.DB, s *container.StatsResponse, functionID string, contai
 		) VALUES (?, ?, ?,
 		 		  ?, ?, 
 				  ?, ?, ?)`,
-		containerID,
-		functionID,
+		instanceID,
+		nil, // functionID is inserted later during import
 		s.Read,
 		s.CPUStats.CPUUsage.TotalUsage,
 		cpuPercent,
