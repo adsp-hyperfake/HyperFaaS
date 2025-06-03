@@ -58,6 +58,7 @@ func initDB(db *sql.DB) error {
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			instance_id TEXT NOT NULL,
 			function_id TEXT,
+			image_tag TEXT NOT NULL,
 			timestamp DATETIME NOT NULL,
 
 			-- CPU usage
@@ -176,7 +177,7 @@ func collectMetrics(db *sql.DB) {
 					log.Printf("error: failed to get stats for container %v: %v", c.ID, err)
 					return
 				}
-				if err := saveStats(db, stats, c.ID); err != nil {
+				if err := saveStats(db, stats, c.ID, c.Image); err != nil {
 					log.Printf("error: couldn't save the stats: %v\n", err)
 				}
 			}(cli, db, c)
@@ -208,7 +209,7 @@ func queryStats(ctx context.Context, cli *client.Client, containerID string) (*c
 	return &s, nil
 }
 
-func saveStats(db *sql.DB, s *container.StatsResponse, containerID string) error {
+func saveStats(db *sql.DB, s *container.StatsResponse, containerID string, image_tag string) error {
 	mem := calculateMemUsageUnixNoCache(s.MemoryStats)
 	memLimit := float64(s.MemoryStats.Limit)
 	memPercent := calculateMemPercentUnixNoCache(memLimit, mem)
@@ -221,7 +222,7 @@ func saveStats(db *sql.DB, s *container.StatsResponse, containerID string) error
 
 	_, err := db.Exec(`
 		INSERT INTO cpu_mem_stats (
-			instance_id, function_id, timestamp,
+			instance_id, function_id, image_tag, timestamp,
 
 			cpu_usage_total,
 			cpu_usage_percent,
@@ -229,11 +230,12 @@ func saveStats(db *sql.DB, s *container.StatsResponse, containerID string) error
 			memory_usage,
 			memory_usage_limit,
 			memory_usage_percent
-		) VALUES (?, ?, ?,
+		) VALUES (?, ?, ?, ?,
 		 		  ?, ?, 
 				  ?, ?, ?)`,
 		instanceID,
 		nil, // functionID is inserted later during import
+		image_tag,
 		s.Read,
 		s.CPUStats.CPUUsage.TotalUsage,
 		cpuPercent,
