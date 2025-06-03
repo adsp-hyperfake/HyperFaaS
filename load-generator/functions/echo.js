@@ -8,7 +8,8 @@ import {
   leafGotRequestTimestamp,
   leafScheduledCallTimestamp,
   leafGotRequestTimestampKey,
-  leafScheduledCallTimestampKey
+  leafScheduledCallTimestampKey,
+  functionParametersMetric
 } from '../metrics.js';
 import { getRandomInt, isoToMs } from '../utils.js'
 
@@ -73,6 +74,7 @@ export function echoFunction(setupData) {
   instanceIdMetric.add(0, { instanceId: response.trailers[instanceIdKey][0] });
   leafGotRequestTimestamp.add(isoToMs(response.trailers[leafGotRequestTimestampKey]));
   leafScheduledCallTimestamp.add(isoToMs(response.trailers[leafScheduledCallTimestampKey]));
+  functionParametersMetric.add(0, { functionParameters: JSON.stringify(data) });
   // check that there is no error and that the data that was sent is the same as the data that was received
   /* check(response, {
     'No error when scheduling echo function': (r) => {

@@ -6,6 +6,7 @@ export const instanceIdKey = 'instanceid';
 export const functionProcessingTimeKey = 'functionprocessingtime';
 export const leafGotRequestTimestampKey = 'leafgotrequesttimestamp';
 export const leafScheduledCallTimestampKey = 'leafscheduledcalltimestamp';
+export const functionParametersKey = 'functionparameters';
 
 
 export const callQueuedTimestamp = new Trend(callQueuedTimestampKey, true);
@@ -14,5 +15,6 @@ export const instanceIdMetric = new Trend(instanceIdKey);
 export const leafGotRequestTimestamp = new Trend(leafGotRequestTimestampKey, true);
 export const leafScheduledCallTimestamp = new Trend(leafScheduledCallTimestampKey, true);
 export const functionProcessingTime = new Trend(functionProcessingTimeKey);
+export const functionParametersMetric = new Trend(functionParametersKey);
 
 // for some reason if we use a function the metrics are not exported, so don't try it..
