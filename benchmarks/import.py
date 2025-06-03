@@ -30,6 +30,7 @@ def create_tables(conn):
         data_sent REAL,
         data_received REAL,
         iteration_duration REAL,
+        function_parameters TEXT,
         
         -- Other metadata
         proto TEXT,
@@ -144,6 +145,8 @@ def import_csv_to_sqlite(csv_file='test_results.csv', db_file='metrics.db', json
                     requests[request_key]['instance_id'] = tags['instanceId']
                 if 'functionProcessingTime' in tags:
                     requests[request_key]['function_processing_time'] = tags['functionProcessingTime']
+                if 'functionParameters' in tags:
+                    requests[request_key]['function_parameters'] = tags['functionParameters']
                     
             # Store proto and subproto info
             requests[request_key]['proto'] = row['proto']
@@ -177,9 +180,9 @@ def import_csv_to_sqlite(csv_file='test_results.csv', db_file='metrics.db', json
             timestamp, scenario, service, image_tag, instance_id, request_id,
             grpc_req_duration, callqueuedtimestamp, gotresponsetimestamp, functionprocessingtime,
             leafgotrequesttimestamp, leafscheduledcalltimestamp,
-            data_sent, data_received, iteration_duration,
+            data_sent, data_received, iteration_duration, function_parameters,
             proto, subproto, group_name, extra_tags
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             data.get('timestamp'),
             data.get('scenario'),
@@ -196,6 +199,7 @@ def import_csv_to_sqlite(csv_file='test_results.csv', db_file='metrics.db', json
             data.get('data_sent'),
             data.get('data_received'),
             data.get('iteration_duration'),
+            data.get('function_parameters'),
             data.get('proto'),
             data.get('subproto'),
             data.get('group_name'),
