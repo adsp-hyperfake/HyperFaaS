@@ -28,10 +28,10 @@ const (
 	RequestedMemory    = 100 * 1024 * 1024 // 100MB
 	RequestedCPUPeriod = 100000
 	RequestedCPUQuota  = 50000
-	SQLITE_DB_PATH     = "./benchmarks/metrics.db"
-	TIMEOUT            = 40 * time.Second
+	SQLITE_DB_PATH     = "metrics.db"
+	TIMEOUT            = 10 * time.Second
 	DURATION           = 10 * time.Second
-	RPS                = 50
+	RPS                = 500
 )
 
 type CallMetadata struct {
@@ -72,8 +72,7 @@ func main() {
 	//testConcurrentCalls(client, functionIDs[0], 10)
 	//testConcurrentCalls(client, functionIDs[0], 10)
 	// Sequential calls
-	//testSequentialCalls(client, createFunctionResp.FunctionID)
-	//testSequentialCalls(client, createFunctionResp.FunctionID)
+	//testSequentialCalls(client, functionIDs[0])
 
 	// Concurrent calls for duration
 	testConcurrentCallsForDuration(client, functionIDs[1], RPS, DURATION)
@@ -208,7 +207,7 @@ func sendCall(client pb.LeafClient, functionID *common.FunctionID) (time.Duratio
 }
 
 func testSequentialCalls(client pb.LeafClient, functionID *common.FunctionID) {
-	for i := 0; i < 20; i++ {
+	for i := 0; i < 100; i++ {
 		req := &pb.ScheduleCallRequest{
 			FunctionID: functionID,
 			Data:       []byte(""),
@@ -243,6 +242,8 @@ func createFunction(imageTag string, client *pb.LeafClient) (*common.FunctionID,
 				Period: RequestedCPUPeriod,
 				Quota:  RequestedCPUQuota,
 			},
+			MaxConcurrency: 500,
+			Timeout:        10,
 		},
 	}
 
