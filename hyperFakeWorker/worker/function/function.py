@@ -61,7 +61,7 @@ class Function():
             logger.debug(f"Executing function {self.function_id} - {self.instance_id}")
             if self.is_cold:
                 logger.debug(f"Waiting for coldstart of function {self.function_id} - {self.instance_id}")
-                time.sleep(1)
+                # time.sleep(1)
                 self.is_cold = False
                 self.status_signal.send(self, update=StatusUpdate(
                     instance_id=InstanceID(id=self.instance_id),
@@ -71,7 +71,7 @@ class Function():
                     timestamp=get_timestamp()
                 ))
                 logger.debug(f"Finished coldstart of function {self.function_id} - {self.instance_id}")
-            time.sleep(1)
+            # time.sleep(1)
             timeout = False
             if timeout:
                 self.status_signal.send(self, update=StatusUpdate(
@@ -103,7 +103,7 @@ class FunctionManager():
 
         self.status_signal = signal("status")
 
-    def get_image(self, function_id: FunctionIdStr):#
+    def get_image(self, function_id: FunctionIdStr):
         with self.data_lock:
             if self.images.get(function_id) is None:
                 self.images[function_id] = self.kvs_client.get_image(function_id)
@@ -183,7 +183,8 @@ class FunctionManager():
             state = []
             for function_id in self.instances.keys():
                 functions = self.instances[function_id]
-                running, idle = [], []
+                running = []
+                idle = []
                 for func in functions:
                     instance_state = InstanceState(
                         instance_id=func.instance_id,
@@ -199,9 +200,24 @@ class FunctionManager():
                         idle.append(
                             instance_state
                         )
-                state.append(FunctionState(
-                    function_id=function_id,
-                    running=running,
-                    idle=idle
-                ))
+                if len(idle) <= 0 and len(running) <= 0:
+                    state.append(FunctionState(
+                        function_id=FunctionID(id=function_id),
+                    ))
+                elif len(idle) > 0 and len(running) <= 0:
+                    state.append(FunctionState(
+                        function_id=FunctionID(id=function_id),
+                        idle=idle
+                    ))
+                elif len(idle) > 0 and len(running) > 0:
+                    state.append(FunctionState(
+                        function_id=FunctionID(id=function_id),
+                        running=running,
+                    ))
+                else:
+                    state.append(FunctionState(
+                        function_id=FunctionID(id=function_id),
+                        running=running,
+                        idle=idle
+                    ))
             return state
