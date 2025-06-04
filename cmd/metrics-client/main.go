@@ -70,7 +70,15 @@ func initDB(db *sql.DB) error {
 			-- Memory. Linux
 			memory_usage BIGINT,
 			memory_usage_limit BIGINT,
-			memory_usage_percent FLOAT
+			memory_usage_percent FLOAT,
+
+			-- Disk
+			block_read FLOAT,
+			block_write FLOAT,
+
+			-- Network
+			network_rx FLOAT,
+			network_tx FLOAT
 		)
 	`)
 	if err != nil {
@@ -220,6 +228,11 @@ func saveStats(db *sql.DB, s *container.StatsResponse, containerID string, image
 
 	instanceID := containerID[:12]
 
+	netRx, netTx := calculateNetwork(s.Networks)
+
+	// Assume Linux
+	blockRead, blockWrite := calculateBlockIO(s.BlkioStats)
+
 	_, err := db.Exec(`
 		INSERT INTO cpu_mem_stats (
 			instance_id, function_id, image_tag, timestamp,
@@ -229,10 +242,19 @@ func saveStats(db *sql.DB, s *container.StatsResponse, containerID string, image
 
 			memory_usage,
 			memory_usage_limit,
-			memory_usage_percent
+			memory_usage_percent,
+
+			block_read,
+			block_write,
+
+			network_rx,
+			network_tx
+
 		) VALUES (?, ?, ?, ?,
 		 		  ?, ?, 
-				  ?, ?, ?)`,
+				  ?, ?, ?, 
+				  ?, ?, 
+				  ?, ?)`,
 		instanceID,
 		nil, // functionID is inserted later during import
 		image_tag,
@@ -242,6 +264,10 @@ func saveStats(db *sql.DB, s *container.StatsResponse, containerID string, image
 		mem,
 		memLimit,
 		memPercent,
+		blockRead,
+		blockWrite,
+		netRx,
+		netTx,
 	)
 
 	return err
@@ -268,7 +294,7 @@ func calculateCPUPercent(previousCPU, previousSystem uint64, s *container.StatsR
 	return cpuPercent
 }
 
-// Taken from from dcoker-cli
+// Taken from dcoker-cli
 // calculateMemUsageUnixNoCache calculate memory usage of the container.
 // Cache is intentionally excluded to avoid misinterpretation of the output.
 //
@@ -300,4 +326,34 @@ func calculateMemPercentUnixNoCache(limit float64, usedNoCache float64) float64 
 		return usedNoCache / limit * 100.0
 	}
 	return 0
+}
+
+// claculateNetwork return bytes received and bytes sent
+// Taken from docker-cli
+func calculateNetwork(network map[string]container.NetworkStats) (float64, float64) {
+	var rx, tx float64
+
+	for _, v := range network {
+		rx += float64(v.RxBytes)
+		tx += float64(v.TxBytes)
+	}
+	return rx, tx
+}
+
+// calculateBlockIO returns total bytes read and written
+// Taken from docker-cli
+func calculateBlockIO(blkio container.BlkioStats) (uint64, uint64) {
+	var blkRead, blkWrite uint64
+	for _, bioEntry := range blkio.IoServiceBytesRecursive {
+		if len(bioEntry.Op) == 0 {
+			continue
+		}
+		switch bioEntry.Op[0] {
+		case 'r', 'R':
+			blkRead += bioEntry.Value
+		case 'w', 'W':
+			blkWrite += bioEntry.Value
+		}
+	}
+	return blkRead, blkWrite
 }
