@@ -1,4 +1,5 @@
 import grpc
+from traceback import print_exc
 
 from ..api.controller import controller_pb2_grpc
 from ..api.common.common_pb2 import FunctionID, InstanceID, CallRequest, CallResponse, Error
@@ -29,45 +30,52 @@ class ControllerServicer(controller_pb2_grpc.ControllerServicer):
                     function_id=FunctionID(id=new_function.function_id),
                 )
             )
-            logger.debug(f"Scheduled instance {new_function.instance_id} for function {new_function.function_id}")
+            logger.info(f"Scheduled instance {new_function.instance_id} for function {new_function.function_id}")
             return InstanceID(id=new_function.instance_id)
     
     def Call(self, request: CallRequest, context: grpc.ServicerContext):
         logger.debug(f"Got Call for function instance {request.instance_id.id}")
         func = self._fn_mngr.get_function(request.instance_id.id)
         with func.work_lock:
-            response = func.work(10)
-            if response:
-                self._fn_mngr.send_status_update(
-                    StatusUpdate(
-                        instance_id=InstanceID(id=func.instance_id),
-                        event=Event.Value("EVENT_RESPONSE"),
-                        status=Status.Value("STATUS_SUCCESS"),
-                        function_id=FunctionID(id=func.function_id),
+            try:
+                queued_ts = get_timestamp().ToMilliseconds()
+                response = func.work(10)
+                response_ts = get_timestamp().ToMilliseconds()
+                if response:
+                    self._fn_mngr.send_status_update(
+                        StatusUpdate(
+                            instance_id=InstanceID(id=func.instance_id),
+                            event=Event.Value("EVENT_RESPONSE"),
+                            status=Status.Value("STATUS_SUCCESS"),
+                            function_id=FunctionID(id=func.function_id),
+                        )
+                    )
+                else:
+                    self._fn_mngr.send_status_update(
+                        StatusUpdate(
+                            instance_id=InstanceID(id=func.instance_id),
+                            event=Event.Value("EVENT_DOWN"),
+                            function_id=FunctionID(id=func.function_id),
+                        )
+                    )
+                response = CallResponse(
+                    data=response
+                )
+                logger.debug(f"Returning response {response.__str__()}")
+                context.set_trailing_metadata(
+                    (
+                        ("gotResponseTimestamp".lower(), str(response_ts)),
+                        ("callQueuedTimestamp".lower(), str(queued_ts)),
+                        ("functionProcessingTime".lower(), str(response_ts - queued_ts))
                     )
                 )
-            else:
-                self._fn_mngr.send_status_update(
-                    StatusUpdate(
-                        instance_id=InstanceID(id=func.instance_id),
-                        event=Event.Value("EVENT_DOWN"),
-                        function_id=FunctionID(id=func.function_id),
-                    )
-                )
-            response = CallResponse(
-                data=response
-            )
-            logger.debug(f"Returning response {response.__str__()}")
-            context.set_trailing_metadata(
-                (
-                    ("gotResponseTimestamp".lower(), str(get_timestamp().ToSeconds())),
-                    ("callQueuedTimestamp".lower(),  str(get_timestamp().ToSeconds())),
-                )
-            )
-            return response
+                return response
+            except Error as e:
+                print("Encountered error!")
+                print_exc()
     
     def Stop(self, request: InstanceID, context: grpc.ServicerContext):
-        logger.debug(f"Got Stop call for function instance {request.id}")
+        logger.info(f"Got Stop call for function instance {request.id}")
         func = self._fn_mngr.remove_function(request.id)
         self._fn_mngr.send_status_update(
             StatusUpdate(

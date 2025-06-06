@@ -31,6 +31,10 @@ class Function():
         self.status_signal = signal("status")
 
     @property
+    def was_recently_active(self):
+        return self.is_active or self.time_since_last_work < 1.0
+
+    @property
     def is_active(self):
         got_lock = self.work_lock.acquire(blocking=False)
         if got_lock:
@@ -52,12 +56,13 @@ class Function():
         hash_source = function_id + str(random.randint(1, 2^31))
         return Function(
             function_id=function_id,
-            instance_id=sha256(hash_source.encode(errors="ignore")).hexdigest(),
+            instance_id=sha256(hash_source.encode(errors="ignore")).hexdigest()[0:12],
             image=image
         )
     
     def work(self, bytes: int):
         with self.work_lock:
+            self.last_worked_at = int(datetime.datetime.now().timestamp())
             logger.debug(f"Executing function {self.function_id} - {self.instance_id}")
             if self.is_cold:
                 logger.debug(f"Waiting for coldstart of function {self.function_id} - {self.instance_id}")
@@ -108,6 +113,19 @@ class FunctionManager():
             if self.images.get(function_id) is None:
                 self.images[function_id] = self.kvs_client.get_image(function_id)
             return self.images[function_id]
+
+    def get_num_recently_active_functions(self, function_id: FunctionIdStr) -> int:
+        with self.data_lock:
+            return len(list(filter(lambda i: i.was_recently_active, self.instances.get(function_id))))
+
+    @property
+    def num_recently_active_functions(self) -> dict[FunctionIdStr, int]:
+        with self.data_lock:
+            active_funcs = {}
+            for key, value in self.instances.items():
+                active = list(filter(lambda i: i.was_recently_active, value))
+                active_funcs[key] = len(active)
+            return active_funcs
 
     def get_num_active_functions(self, function_id: FunctionIdStr) -> int:
         with self.data_lock:
