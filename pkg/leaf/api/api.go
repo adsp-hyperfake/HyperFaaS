@@ -117,7 +117,7 @@ func (s *LeafServer) ScheduleCall(ctx context.Context, req *leaf.ScheduleCallReq
 		}
 	}
 
-	//log.Printf("Received response from worker %s, instanceID: %s", workerID, instanceID)
+	log.Printf("Received response from worker %s, instanceID: %s", workerID, instanceID)
 	s.scheduler.UpdateInstanceState(workerID, functionId, instanceID, state.InstanceStateIdle)
 
 	// Add metadata to trailers
