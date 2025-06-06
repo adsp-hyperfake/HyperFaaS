@@ -1,5 +1,5 @@
 import { Trend } from 'k6/metrics';
-
+export const functionTimeout = "10s"
 export const callQueuedTimestampKey = 'callqueuedtimestamp';
 export const gotResponseTimestampKey = 'gotresponsetimestamp';
 export const instanceIdKey = 'instanceid';
@@ -16,5 +16,6 @@ export const leafGotRequestTimestamp = new Trend(leafGotRequestTimestampKey, tru
 export const leafScheduledCallTimestamp = new Trend(leafScheduledCallTimestampKey, true);
 export const functionProcessingTime = new Trend(functionProcessingTimeKey);
 export const functionParametersMetric = new Trend(functionParametersKey);
-
+export const timeout = new Trend("timeout", true);
+export const error = new Trend("error", true);
 // for some reason if we use a function the metrics are not exported, so don't try it..
