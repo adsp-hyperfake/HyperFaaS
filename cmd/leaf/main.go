@@ -87,6 +87,7 @@ func main() {
 
 	server := api.NewLeafServer(scheduler,
 		dbClient,
+		ids,
 		*maxStartingInstancesPerFunction,
 		*startingInstanceWaitTimeout,
 		*maxRunningInstancesPerFunction,
