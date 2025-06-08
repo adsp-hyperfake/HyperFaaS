@@ -1,0 +1,21 @@
+{
+    "hyperparams": {
+        "hidden_dims": [
+            39,
+            21
+        ],
+        "dropouts": [
+            0.03267819348951357,
+            0.02272203322672002
+        ],
+        "lr": 0.004580708150974148,
+        "weight_decay": 1.0540556598931587e-06,
+        "batch_size": 64,
+        "patience": 20,
+        "optimizer": "Adam"
+    },
+    "val_score_optuna": 0.5603743326065578,
+    "val_score_final_training_optuna": 0.5593990597609929,
+    "val_score_training_full_data": 0.5014,
+    "r2_score_training_full_data": 0.4984
+}
