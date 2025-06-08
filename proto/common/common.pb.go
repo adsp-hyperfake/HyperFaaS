@@ -270,6 +270,7 @@ type CallResponse struct {
 	RequestId     int64                  `protobuf:"varint,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	Data          []byte                 `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
 	Error         *Error                 `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	InstanceId    *InstanceID            `protobuf:"bytes,4,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -321,6 +322,13 @@ func (x *CallResponse) GetData() []byte {
 func (x *CallResponse) GetError() *Error {
 	if x != nil {
 		return x.Error
+	}
+	return nil
+}
+
+func (x *CallResponse) GetInstanceId() *InstanceID {
+	if x != nil {
+		return x.InstanceId
 	}
 	return nil
 }
@@ -471,12 +479,14 @@ const file_common_common_proto_rawDesc = "" +
 	"instanceId\x12\x12\n" +
 	"\x04data\x18\x03 \x01(\fR\x04data\x123\n" +
 	"\vfunction_id\x18\x04 \x01(\v2\x12.common.FunctionIDR\n" +
-	"functionId\"f\n" +
+	"functionId\"\x9b\x01\n" +
 	"\fCallResponse\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\x03R\trequestId\x12\x12\n" +
 	"\x04data\x18\x02 \x01(\fR\x04data\x12#\n" +
-	"\x05error\x18\x03 \x01(\v2\r.common.ErrorR\x05error\"\x88\x01\n" +
+	"\x05error\x18\x03 \x01(\v2\r.common.ErrorR\x05error\x123\n" +
+	"\vinstance_id\x18\x04 \x01(\v2\x12.common.InstanceIDR\n" +
+	"instanceId\"\x88\x01\n" +
 	"\x06Config\x12\x16\n" +
 	"\x06memory\x18\x01 \x01(\x03R\x06memory\x12#\n" +
 	"\x03cpu\x18\x02 \x01(\v2\x11.common.CPUConfigR\x03cpu\x12\x18\n" +
@@ -513,12 +523,13 @@ var file_common_common_proto_depIdxs = []int32{
 	1, // 0: common.CallRequest.instance_id:type_name -> common.InstanceID
 	2, // 1: common.CallRequest.function_id:type_name -> common.FunctionID
 	0, // 2: common.CallResponse.error:type_name -> common.Error
-	7, // 3: common.Config.cpu:type_name -> common.CPUConfig
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	1, // 3: common.CallResponse.instance_id:type_name -> common.InstanceID
+	7, // 4: common.Config.cpu:type_name -> common.CPUConfig
+	5, // [5:5] is the sub-list for method output_type
+	5, // [5:5] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_common_common_proto_init() }

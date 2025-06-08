@@ -22,6 +22,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -78,7 +79,7 @@ func (s *Controller) Start(ctx context.Context, req *common.FunctionID) (*contro
 		return nil, err
 	}
 	// Container has been requested; we actually dont know if its running or not
-	s.StatsManager.Enqueue(stats.Event().Function(req.Id).Container(shortID).Start().Success().WithTimestamp(timestamp))
+	s.StatsManager.Enqueue(stats.Event().Function(req.Id).Container(shortID).Start().Success().WithTimestamp(time.Now()))
 
 	go s.monitorContainerLifecycle(req.Id, container)
 
@@ -93,7 +94,24 @@ func (s *Controller) Start(ctx context.Context, req *common.FunctionID) (*contro
 func (s *Controller) Call(ctx context.Context, req *common.CallRequest) (*common.CallResponse, error) {
 	// TODO RENAME TO FUNCTIONID .
 	s.logger.Debug("Calling function", "instanceID", req.InstanceId.Id, "functionID", req.FunctionId.Id)
-	return s.callRouter.CallFunction(req.FunctionId.Id, req)
+
+	callQueuedTimestamp := time.Now()
+	callResponse, err := s.callRouter.CallFunction(req.FunctionId.Id, req)
+	if err != nil {
+		return nil, err
+	}
+	gotResponseTimestamp := time.Now()
+
+	defer func() {
+		trailer := metadata.New(map[string]string{
+			"gotResponseTimestamp":   strconv.FormatInt(gotResponseTimestamp.UnixNano(), 10),
+			"callQueuedTimestamp":    strconv.FormatInt(callQueuedTimestamp.UnixNano(), 10),
+			"functionProcessingTime": gotResponseTimestamp.Sub(callQueuedTimestamp).String(),
+		})
+		grpc.SetTrailer(ctx, trailer)
+	}()
+
+	return callResponse, nil
 }
 
 func (s *Controller) Stop(ctx context.Context, req *common.InstanceID) (*common.InstanceID, error) {

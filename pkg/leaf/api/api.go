@@ -7,6 +7,7 @@ import (
 	"log"
 	"log/slog"
 	"math/rand"
+	"strconv"
 	"sync"
 	"time"
 
@@ -45,6 +46,7 @@ type CallMetadata struct {
 	FunctionProcessingTime     string
 	LeafGotRequestTimestamp    string
 	LeafScheduledCallTimestamp string
+	InstanceID                 string
 }
 
 // CreateFunction should only create the function, e.g. save its Config and image tag in local cache
@@ -81,6 +83,7 @@ func (s *LeafServer) CreateFunction(ctx context.Context, req *leaf.CreateFunctio
 }
 
 func (s *LeafServer) ScheduleCall(ctx context.Context, req *leaf.ScheduleCallRequest) (*leaf.ScheduleCallResponse, error) {
+	leafGotRequestTimestamp := time.Now()
 	autoscaler := s.state.GetAutoscaler(state.FunctionID(req.FunctionID.Id))
 	if autoscaler.IsScaledDown() {
 		err := autoscaler.ForceScaleUp(ctx)
@@ -116,11 +119,24 @@ func (s *LeafServer) ScheduleCall(ctx context.Context, req *leaf.ScheduleCallReq
 	s.functionMetricChansMutex.RUnlock()
 	metricChan <- true
 	// Note: we send function id as instance id because I havent updated the proto yet. But the call instance endpoint is now call function. worker handles the instance id.
-	resp, err := s.callWorker(ctx, randWorker, state.FunctionID(req.FunctionID.Id), state.InstanceID(req.FunctionID.Id), req)
+	leafScheduledCallTimestamp := time.Now()
+	resp, callMetadata, err := s.callWorker(ctx, randWorker, state.FunctionID(req.FunctionID.Id), state.InstanceID(req.FunctionID.Id), req)
 	if err != nil {
 		return nil, err
 	}
 	metricChan <- false
+
+	defer func() {
+		trailer := metadata.New(map[string]string{
+			"callQueuedTimestamp":        callMetadata.CallQueuedTimestamp,
+			"gotResponseTimestamp":       callMetadata.GotResponseTimestamp,
+			"functionProcessingTime":     callMetadata.FunctionProcessingTime,
+			"instanceID":                 callMetadata.InstanceID,
+			"leafGotRequestTimestamp":    strconv.FormatInt(leafGotRequestTimestamp.UnixNano(), 10),
+			"leafScheduledCallTimestamp": strconv.FormatInt(leafScheduledCallTimestamp.UnixNano(), 10),
+		})
+		grpc.SetTrailer(ctx, trailer)
+	}()
 
 	return resp, nil
 }
@@ -196,6 +212,7 @@ func (s *LeafServer) callWorker(ctx context.Context, workerID state.WorkerID, fu
 		CallQueuedTimestamp:    trailer.Get("callQueuedTimestamp")[0],
 		GotResponseTimestamp:   trailer.Get("gotResponseTimestamp")[0],
 		FunctionProcessingTime: trailer.Get("functionProcessingTime")[0],
+		InstanceID:             resp.InstanceId.Id,
 	}
 
 	return &leaf.ScheduleCallResponse{Data: resp.Data, Error: resp.Error}, callMetadata, nil

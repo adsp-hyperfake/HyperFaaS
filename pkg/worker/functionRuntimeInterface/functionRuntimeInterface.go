@@ -29,7 +29,6 @@ type Response struct {
 
 type Function struct {
 	timeout      int
-	address      string
 	request      *Request
 	response     *Response
 	instanceId   string
@@ -42,19 +41,13 @@ type Function struct {
 }
 
 func New(timeout int) *Function {
-	address, ok := os.LookupEnv("CALLER_SERVER_ADDRESS")
-	if !ok {
-		fmt.Printf("Environment variable CALLER_SERVER_ADDRESS not found")
-	}
 	functionId, ok := os.LookupEnv("FUNCTION_ID")
 	if !ok {
 		fmt.Printf("Environment variable FUNCTION_ID not found")
 	}
-	fmt.Printf("CALLER_SERVER_ADDRESS: %s", address)
 
 	return &Function{
 		timeout:    timeout,
-		address:    address,
 		request:    &Request{},
 		response:   &Response{},
 		instanceId: getID(),
@@ -66,8 +59,10 @@ func (f *Function) Call(ctx context.Context, req *common.CallRequest) (*common.C
 	f.activityMu.Lock()
 	f.lastActivity = time.Now()
 	f.activityMu.Unlock()
-
-	return f.handler(ctx, req)
+	resp, err := f.handler(ctx, req)
+	//inject instance id
+	resp.InstanceId = &common.InstanceID{Id: f.instanceId}
+	return resp, err
 }
 
 func (f *Function) Ready(handler func(context.Context, *common.CallRequest) (*common.CallResponse, error)) {

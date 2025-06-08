@@ -31,6 +31,7 @@ message CallResponse {
     int64 request_id = 1;
     bytes data = 2;
     Error error = 3;
+    InstanceID instance_id = 4;
 }
 
 message Config {
