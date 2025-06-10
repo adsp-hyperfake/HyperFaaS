@@ -187,7 +187,7 @@ class TrainingData:
         worker_stats = {}
         for timestamp_sec, group in tqdm(stats_df_copy.groupby('timestamp_seconds'), desc="Computing worker stats"):
             unique_instances = group['instance_id'].nunique()
-            avg_cpu_usage = group['cpu_usage_percent'].mean() / 100.0  # Convert to cores (0-1 scale)
+            avg_cpu_usage = group['cpu_usage_percent'].mean()
             avg_memory_usage = group['memory_usage'].mean()
             
             worker_stats[timestamp_sec] = {
@@ -214,7 +214,7 @@ class TrainingData:
         for _, row in tqdm(stats_df_copy.iterrows(), total=len(stats_df_copy), desc="Computing instance stats"):
             instance_id = row['instance_id']
             timestamp_sec = row['timestamp_seconds']
-            cpu_usage = float(row['cpu_usage_percent']) / 100.0  # Convert to cores (0-1 scale)
+            cpu_usage = float(row['cpu_usage_percent'])
             ram_usage = int(row['memory_usage']) if pd.notna(row['memory_usage']) else 0
             
             instance_stats[(instance_id, timestamp_sec)] = (cpu_usage, ram_usage)
