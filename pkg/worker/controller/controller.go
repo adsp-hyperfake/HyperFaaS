@@ -106,7 +106,7 @@ func (s *Controller) Call(ctx context.Context, req *common.CallRequest) (*common
 		trailer := metadata.New(map[string]string{
 			"gotResponseTimestamp":   strconv.FormatInt(gotResponseTimestamp.UnixNano(), 10),
 			"callQueuedTimestamp":    strconv.FormatInt(callQueuedTimestamp.UnixNano(), 10),
-			"functionProcessingTime": gotResponseTimestamp.Sub(callQueuedTimestamp).String(),
+			"functionProcessingTime": strconv.FormatInt(gotResponseTimestamp.Sub(callQueuedTimestamp).Nanoseconds(), 10),
 		})
 		grpc.SetTrailer(ctx, trailer)
 	}()
