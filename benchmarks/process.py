@@ -249,12 +249,8 @@ class TrainingData:
                 function_image_tag = row['image_tag']
                 instance_id = row['instance_id']
                 
-                # Calculate request body size  TODO. use maybe payload column
+                # Calculate request body size
                 request_body_size = int(row['data_sent']) if pd.notna(row['data_sent']) else 0
-                if request_body_size == 0 and pd.notna(row['data_received']):
-                    request_body_size = int(row['data_received'])
-                
-
                 active_calls = active_calls_lookup.get(timestamp, 0)
                 
                 worker_stats = worker_stats_lookup.get(int(timestamp / 1e9), {
