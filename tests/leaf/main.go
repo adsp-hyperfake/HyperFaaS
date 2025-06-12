@@ -30,14 +30,15 @@ const (
 	RequestedCPUQuota  = 50000
 	SQLITE_DB_PATH     = "metrics.db"
 	TIMEOUT            = 30 * time.Second
-	DURATION           = 10 * time.Second
-	RPS                = 2500
+	DURATION           = 15 * time.Second
+	RPS                = 15
 )
 
 type CallMetadata struct {
 	CallQueuedTimestamp    string
 	GotResponseTimestamp   string
 	FunctionProcessingTime string
+	InstanceID             string
 }
 
 func main() {
@@ -62,10 +63,10 @@ func main() {
 			log.Fatalf("Failed to create function: %v", err)
 		}
 		functionIDs[i] = functionID
-		err = saveFunctionId(functionID, imageTag)
+		/* err = saveFunctionId(functionID, imageTag)
 		if err != nil {
 			log.Fatalf("Failed to save function id: %v", err)
-		}
+		} */
 	}
 
 	// Sequential calls
@@ -75,7 +76,7 @@ func main() {
 	//testConcurrentCallsForDuration(client, functionIDs[0], RPS, DURATION)
 	go testRampingCallsForDuration(client, functionIDs[0], RPS, DURATION, 60*time.Second)
 	go testRampingCallsForDuration(client, functionIDs[1], RPS, DURATION, 60*time.Second)
-	go testRampingCallsForDuration(client, functionIDs[2], RPS, DURATION, 60*time.Second)
+	//go testRampingCallsForDuration(client, functionIDs[2], RPS, DURATION, 60*time.Second)
 	time.Sleep(DURATION + 5*time.Second)
 	// Send thumbnail request
 	//sendThumbnailRequest(client, functiocallerServer := caller.NewCallerServer(config.Config.CallerServerAddress, logger, statsManager)nIDs[3])
@@ -124,10 +125,12 @@ func testConcurrentCalls(client pb.LeafClient, functionID *common.FunctionID, nu
 
 	// Wait for all goroutines to complete
 	_ = g.Wait()
-
-	avgLatency := totalLatency / time.Duration(numCalls)
-
-	fmt.Printf("Concurrent calls complete - Successful: %d, Failed: %d, AvgLatency: %v\n", successCount, failureCount, avgLatency)
+	if numCalls > 0 {
+		avgLatency := totalLatency / time.Duration(numCalls)
+		fmt.Printf("Concurrent calls complete - Successful: %d, Failed: %d, AvgLatency: %v\n", successCount, failureCount, avgLatency)
+	} else {
+		fmt.Printf("Concurrent calls complete - Successful: %d, Failed: %d, AvgLatency: %v\n", successCount, failureCount, 0)
+	}
 }
 
 func testConcurrentCallsForDuration(client pb.LeafClient, functionID *common.FunctionID, rps int, duration time.Duration) {
@@ -162,7 +165,7 @@ func testRampingCallsForDuration(client pb.LeafClient, functionID *common.Functi
 	ctx, cancel := context.WithTimeout(context.Background(), duration+3*time.Second)
 	defer cancel()
 
-	currentRPS := targetRPS / rampUpSeconds
+	currentRPS := targetRPS/rampUpSeconds + 1
 
 	for i := 0; i < rampUpSeconds; i++ {
 		select {
@@ -231,9 +234,10 @@ func sendCall(client pb.LeafClient, functionID *common.FunctionID) (time.Duratio
 		CallQueuedTimestamp:    metadata.Get("callQueuedTimestamp")[0],
 		GotResponseTimestamp:   metadata.Get("gotResponseTimestamp")[0],
 		FunctionProcessingTime: metadata.Get("functionProcessingTime")[0],
+		InstanceID:             metadata.Get("instanceID")[0],
 	}
 	latency := time.Since(start)
-	log.Printf("Latency: %v, Call queued at %s, got response at %s, function processing time: %s", latency, callMetadata.CallQueuedTimestamp, callMetadata.GotResponseTimestamp, callMetadata.FunctionProcessingTime)
+	log.Printf("Latency: %v, Call queued at %s, got response at %s, function processing time: %s, instanceID: %s", latency, callMetadata.CallQueuedTimestamp, callMetadata.GotResponseTimestamp, callMetadata.FunctionProcessingTime, callMetadata.InstanceID)
 
 	return latency, nil
 }
