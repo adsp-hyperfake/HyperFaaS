@@ -361,7 +361,7 @@ def main():
     parser.add_argument('--active-calls-window-size', type=int, default=100, help='Window size in milliseconds for active calls')
     args = parser.parse_args()
     try:
-        processor = TrainingData(args.db_path, args.active_calls_window_size)
+        processor = TrainingData(args.db_path, args.active_calls_window_size/2)
         processor.run()
         print("Processing completed successfully!")
     except Exception as e:
