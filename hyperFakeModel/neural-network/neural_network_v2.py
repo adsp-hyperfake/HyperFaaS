@@ -1,3 +1,4 @@
+import os
 import sqlite3
 import numpy as np
 import pandas as pd
@@ -121,7 +122,7 @@ def create_sample_data(n_samples=10000):
     return X, y
 
 
-def load_data_from_db(table_name, db_path="../../benchmarks/metrics.db"):
+def load_data_from_db(db_path, table_name):
     """Load data from SQLite database and return features and targets as numpy arrays."""
     # Read data from database
     query = f"SELECT {', '.join(INPUT_COLS + OUTPUT_COLS)} FROM {table_name}"
@@ -385,7 +386,7 @@ def predict_function_metrics(input_data, model_path="function_metrics_model.pt")
     return result
 
 
-def main(table_name, sample_data=False):
+def main(db_name, table_name, sample_data=False):
     """Main training pipeline."""
     torch.manual_seed(42)
     np.random.seed(42)
@@ -396,8 +397,9 @@ def main(table_name, sample_data=False):
     if sample_data:
         X, y = create_sample_data()
     else:
-        X, y = load_data_from_db()
-
+        benchmarks_dir = os.path.dirname(os.path.abspath(__file__))+"/../../benchmarks/"
+        db_path = benchmarks_dir + "/" + db_name
+        X, y = load_data_from_db(db_path, table_name)
     # Split data
     X_temp, X_test, y_temp, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42
@@ -475,5 +477,4 @@ def main(table_name, sample_data=False):
 
 
 if __name__ == "__main__":
-    # for table in ["list", "of", "table_names"]:
-    main("some_table_name", sample_data=True)
+    main("metrics.db", "training_data", sample_data=False)
