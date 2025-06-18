@@ -122,10 +122,10 @@ def create_sample_data(n_samples=10000):
     return X, y
 
 
-def load_data_from_db(db_path, table_name):
+def load_data_from_db(db_path, table_nam, func_tag):
     """Load data from SQLite database and return features and targets as numpy arrays."""
     # Read data from database
-    query = f"SELECT {', '.join(INPUT_COLS + OUTPUT_COLS)} FROM {table_name}"
+    query = f"SELECT {', '.join(INPUT_COLS + OUTPUT_COLS)} FROM {table_name} WHERE function_image_tag = '{func_tag}'"
     try:
         with sqlite3.connect(db_path) as conn:
             df = pd.read_sql_query(query, conn)
@@ -284,45 +284,18 @@ def calculate_metrics(y_true, y_pred, target_names):
 
     return metrics
 
-
-def export_model(model, file_path):
-    """Export the model and preprocessing information."""
-
-    torch.save(model.state_dict(), file_path)
-    print(f"Model exported to {file_path}")
-
-
-def load_exported_model(file_path="function_metrics_model.pt"):
-    """Load an exported model."""
-    model_info = torch.load(file_path, weights_only=False)
-
-    # Recreate model architecture
-    input_dim = model_info["model_architecture"]["input_dim"]
-    hidden_dims = model_info["model_architecture"]["hidden_dims"]
-    output_dim = model_info["model_architecture"]["output_dim"]
-
-    # Create model
-    model = MultiOutputNetwork(input_dim, output_dim, hidden_dims)
-    model.load_state_dict(model_info["model_state"])
-    model.eval()  # Set to evaluation mode
-
-    # Recreate scalers
-    scaler_X = StandardScaler()
-    scaler_X.mean_ = model_info["scaler_X_mean"]
-    scaler_X.scale_ = model_info["scaler_X_scale"]
-
-    scaler_y = StandardScaler()
-    scaler_y.mean_ = model_info["scaler_y_mean"]
-    scaler_y.scale_ = model_info["scaler_y_scale"]
-
-    return (
+def export_model_to_onnx(model, target_path):
+    # Save the model
+    model.eval()
+    dummy_input = torch.zeros(1, 5)
+    torch.onnx.export(
         model,
-        scaler_X,
-        scaler_y,
-        model_info["INPUT_COLS"],
-        model_info["OUTPUT_COLS"],
+        dummy_input,
+        target_path,
+        input_names=['input'],
+        output_names=['output'],
+        do_constant_folding=True, # Optimize the model
     )
-
 
 def predict(model, scaler_X, scaler_y, input_data):
     """Make predictions using the trained model."""
@@ -345,48 +318,7 @@ def predict(model, scaler_X, scaler_y, input_data):
 
     return y_pred
 
-
-def predict_function_metrics(input_data, model_path="function_metrics_model.pt"):
-    """
-    Predict function metrics from input parameters.
-
-    Args:
-        input_data: Dict or DataFrame with input features
-        model_path: Path to the exported model file
-
-    Returns:
-        Dict with predicted metrics
-    """
-    # Load the model
-    model, scaler_X, scaler_y, input_cols, output_cols = load_exported_model(model_path)
-
-    # Check if input_data is a dict and convert to numpy array
-    if isinstance(input_data, dict):
-        # Create a numpy array in the correct order
-        input_array = np.array([[input_data[col] for col in input_cols]])
-    else:
-        # Assume it's a DataFrame or numpy array
-        input_array = input_data
-
-    # Make prediction
-    predictions = predict(model, scaler_X, scaler_y, input_array)
-
-    # Convert to a more usable format
-    if len(predictions) == 1:
-        # Single prediction
-        result = {output_cols[i]: predictions[0][i] for i in range(len(output_cols))}
-    else:
-        # Multiple predictions
-        result = []
-        for i in range(len(predictions)):
-            result.append(
-                {output_cols[j]: predictions[i][j] for j in range(len(output_cols))}
-            )
-
-    return result
-
-
-def main(db_name, table_name, sample_data=False):
+def main(table_name, func_tag, target_path, db_path=None):
     """Main training pipeline."""
     torch.manual_seed(42)
     np.random.seed(42)
@@ -394,12 +326,10 @@ def main(db_name, table_name, sample_data=False):
     print(f"Using device: {DEVICE}")
 
     # Load and preprocess data to tensors
-    if sample_data:
+    if db_path is None:
         X, y = create_sample_data()
     else:
-        benchmarks_dir = os.path.dirname(os.path.abspath(__file__))+"/../../benchmarks/"
-        db_path = benchmarks_dir + "/" + db_name
-        X, y = load_data_from_db(db_path, table_name)
+        X, y = load_data_from_db(db_path, table_name, func_tag)
     # Split data
     X_temp, X_test, y_temp, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42
@@ -473,8 +403,18 @@ def main(db_name, table_name, sample_data=False):
     print("=" * 30)
 
     # Export the model
-    export_model(model, f"./hyperFakeModel/neural-network/{table_name}.pth")
+
+    export_model_to_onnx(model, target_path)
 
 
 if __name__ == "__main__":
-    main("metrics.db", "training_data", sample_data=False)
+    func_tags = ["hyperfaas-bfs-json:latest", "hyperfaas-thumbnailer-json:latest", "hyperfaas-echo:latest"]
+    short_names = ["bfs", "thumbnailer", "echo"]
+    db_name = "metrics.db"
+    curr_dir = os.path.dirname(os.path.abspath(__file__))
+    db_path = curr_dir + "/../../benchmarks/" + db_name
+    table_name = "training_data"
+
+    for func_tag, short_name in zip(func_tags, short_names):
+        target_path = curr_dir + "/" + short_name + ".onnx"
+        main(table_name, func_tag, target_path, db_path=db_path)
