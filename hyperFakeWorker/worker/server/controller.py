@@ -52,9 +52,9 @@ class ControllerServicer(controller_pb2_grpc.ControllerServicer):
                 break
         with func.work_lock:
             try:
-                queued_ts = get_timestamp().ToMilliseconds()
+                queued_ts = get_timestamp().ToNanoseconds()
                 response = func.work(10)
-                response_ts = get_timestamp().ToMilliseconds()
+                response_ts = get_timestamp().ToNanoseconds()
                 if response:
                     self._fn_mngr.send_status_update(
                         StatusUpdate(
