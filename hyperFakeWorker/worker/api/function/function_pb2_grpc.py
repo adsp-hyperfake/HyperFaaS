@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from function import function_pb2 as function_dot_function__pb2
+from common import common_pb2 as common_dot_common__pb2
 
 GRPC_GENERATED_VERSION = '1.71.0'
 GRPC_VERSION = grpc.__version__
@@ -34,17 +34,17 @@ class FunctionServiceStub(object):
         Args:
             channel: A grpc.Channel.
         """
-        self.Ready = channel.unary_unary(
-                '/function.FunctionService/Ready',
-                request_serializer=function_dot_function__pb2.Payload.SerializeToString,
-                response_deserializer=function_dot_function__pb2.Call.FromString,
+        self.Call = channel.unary_unary(
+                '/function.FunctionService/Call',
+                request_serializer=common_dot_common__pb2.CallRequest.SerializeToString,
+                response_deserializer=common_dot_common__pb2.CallResponse.FromString,
                 _registered_method=True)
 
 
 class FunctionServiceServicer(object):
     """Missing associated documentation comment in .proto file."""
 
-    def Ready(self, request, context):
+    def Call(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -53,10 +53,10 @@ class FunctionServiceServicer(object):
 
 def add_FunctionServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
-            'Ready': grpc.unary_unary_rpc_method_handler(
-                    servicer.Ready,
-                    request_deserializer=function_dot_function__pb2.Payload.FromString,
-                    response_serializer=function_dot_function__pb2.Call.SerializeToString,
+            'Call': grpc.unary_unary_rpc_method_handler(
+                    servicer.Call,
+                    request_deserializer=common_dot_common__pb2.CallRequest.FromString,
+                    response_serializer=common_dot_common__pb2.CallResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -70,7 +70,7 @@ class FunctionService(object):
     """Missing associated documentation comment in .proto file."""
 
     @staticmethod
-    def Ready(request,
+    def Call(request,
             target,
             options=(),
             channel_credentials=None,
@@ -83,9 +83,9 @@ class FunctionService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/function.FunctionService/Ready',
-            function_dot_function__pb2.Payload.SerializeToString,
-            function_dot_function__pb2.Call.FromString,
+            '/function.FunctionService/Call',
+            common_dot_common__pb2.CallRequest.SerializeToString,
+            common_dot_common__pb2.CallResponse.FromString,
             options,
             channel_credentials,
             insecure,

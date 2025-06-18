@@ -26,7 +26,7 @@ from common import common_pb2 as common_dot_common__pb2
 from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1b\x63ontroller/controller.proto\x12\ncontroller\x1a\x13\x63ommon/common.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x83\x02\n\x0cStatusUpdate\x12\'\n\x0binstance_id\x18\x01 \x01(\x0b\x32\x12.common.InstanceID\x12,\n\x04type\x18\x02 \x01(\x0e\x32\x1e.controller.VirtualizationType\x12 \n\x05\x65vent\x18\x03 \x01(\x0e\x32\x11.controller.Event\x12\"\n\x06status\x18\x04 \x01(\x0e\x32\x12.controller.Status\x12\'\n\x0b\x66unction_id\x18\x05 \x01(\x0b\x32\x12.common.FunctionID\x12-\n\ttimestamp\x18\x06 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"\x1f\n\rStatusRequest\x12\x0e\n\x06nodeID\x18\x01 \x01(\t\" \n\x0eMetricsRequest\x12\x0e\n\x06nodeID\x18\x01 \x01(\t\"E\n\rMetricsUpdate\x12\x18\n\x10used_ram_percent\x18\x01 \x01(\x01\x12\x1a\n\x12\x63pu_percent_percpu\x18\x02 \x03(\x01\"\x1f\n\x0cStateRequest\x12\x0f\n\x07node_id\x18\x01 \x01(\t\"e\n\rInstanceState\x12\x13\n\x0binstance_id\x18\x01 \x01(\t\x12\x11\n\tis_active\x18\x02 \x01(\x08\x12\x1c\n\x14time_since_last_work\x18\x03 \x01(\x03\x12\x0e\n\x06uptime\x18\x04 \x01(\x03\"\x8d\x01\n\rFunctionState\x12\'\n\x0b\x66unction_id\x18\x01 \x01(\x0b\x32\x12.common.FunctionID\x12*\n\x07running\x18\x02 \x03(\x0b\x32\x19.controller.InstanceState\x12\'\n\x04idle\x18\x03 \x03(\x0b\x32\x19.controller.InstanceState\"=\n\rStateResponse\x12,\n\tfunctions\x18\x01 \x03(\x0b\x32\x19.controller.FunctionState*(\n\x12VirtualizationType\x12\x12\n\x0eTYPE_CONTAINER\x10\x00*\x82\x01\n\x05\x45vent\x12\x12\n\x0e\x45VENT_RESPONSE\x10\x00\x12\x0e\n\nEVENT_DOWN\x10\x01\x12\x11\n\rEVENT_TIMEOUT\x10\x02\x12\x0f\n\x0b\x45VENT_START\x10\x03\x12\x0e\n\nEVENT_STOP\x10\x04\x12\x0e\n\nEVENT_CALL\x10\x05\x12\x11\n\rEVENT_RUNNING\x10\x06*/\n\x06Status\x12\x12\n\x0eSTATUS_SUCCESS\x10\x00\x12\x11\n\rSTATUS_FAILED\x10\x01\x32\xe1\x02\n\nController\x12/\n\x05Start\x12\x12.common.FunctionID\x1a\x12.common.InstanceID\x12\x31\n\x04\x43\x61ll\x12\x13.common.CallRequest\x1a\x14.common.CallResponse\x12.\n\x04Stop\x12\x12.common.InstanceID\x1a\x12.common.InstanceID\x12?\n\x06Status\x12\x19.controller.StatusRequest\x1a\x18.controller.StatusUpdate0\x01\x12@\n\x07Metrics\x12\x1a.controller.MetricsRequest\x1a\x19.controller.MetricsUpdate\x12<\n\x05State\x12\x18.controller.StateRequest\x1a\x19.controller.StateResponseB3Z1github.com/3s-rg-codes/HyperFaaS/proto/controllerb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1b\x63ontroller/controller.proto\x12\ncontroller\x1a\x13\x63ommon/common.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x83\x02\n\x0cStatusUpdate\x12\'\n\x0binstance_id\x18\x01 \x01(\x0b\x32\x12.common.InstanceID\x12,\n\x04type\x18\x02 \x01(\x0e\x32\x1e.controller.VirtualizationType\x12 \n\x05\x65vent\x18\x03 \x01(\x0e\x32\x11.controller.Event\x12\"\n\x06status\x18\x04 \x01(\x0e\x32\x12.controller.Status\x12\'\n\x0b\x66unction_id\x18\x05 \x01(\x0b\x32\x12.common.FunctionID\x12-\n\ttimestamp\x18\x06 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"\x1f\n\rStatusRequest\x12\x0e\n\x06nodeID\x18\x01 \x01(\t\" \n\x0eMetricsRequest\x12\x0e\n\x06nodeID\x18\x01 \x01(\t\"E\n\rMetricsUpdate\x12\x18\n\x10used_ram_percent\x18\x01 \x01(\x01\x12\x1a\n\x12\x63pu_percent_percpu\x18\x02 \x03(\x01\"\x8a\x01\n\x14InstanceStateRequest\x12\'\n\x0b\x66unction_id\x18\x01 \x01(\x0b\x32\x12.common.FunctionID\x12\'\n\x0binstance_id\x18\x02 \x01(\x0b\x32\x12.common.InstanceID\x12 \n\x05\x65vent\x18\x03 \x01(\x0e\x32\x11.controller.Event\"e\n\rInstanceState\x12\x13\n\x0binstance_id\x18\x01 \x01(\t\x12\x11\n\tis_active\x18\x02 \x01(\x08\x12\x1c\n\x14time_since_last_work\x18\x03 \x01(\x03\x12\x0e\n\x06uptime\x18\x04 \x01(\x03\"\x8d\x01\n\rFunctionState\x12\'\n\x0b\x66unction_id\x18\x01 \x01(\x0b\x32\x12.common.FunctionID\x12*\n\x07running\x18\x02 \x03(\x0b\x32\x19.controller.InstanceState\x12\'\n\x04idle\x18\x03 \x03(\x0b\x32\x19.controller.InstanceState\"E\n\x15InstanceStateResponse\x12,\n\tfunctions\x18\x01 \x03(\x0b\x32\x19.controller.FunctionState\"d\n\rStartResponse\x12\'\n\x0binstance_id\x18\x01 \x01(\x0b\x32\x12.common.InstanceID\x12\x13\n\x0binstance_ip\x18\x02 \x01(\t\x12\x15\n\rinstance_name\x18\x03 \x01(\t*(\n\x12VirtualizationType\x12\x12\n\x0eTYPE_CONTAINER\x10\x00*\x82\x01\n\x05\x45vent\x12\x12\n\x0e\x45VENT_RESPONSE\x10\x00\x12\x0e\n\nEVENT_DOWN\x10\x01\x12\x11\n\rEVENT_TIMEOUT\x10\x02\x12\x0f\n\x0b\x45VENT_START\x10\x03\x12\x0e\n\nEVENT_STOP\x10\x04\x12\x0e\n\nEVENT_CALL\x10\x05\x12\x11\n\rEVENT_RUNNING\x10\x06*/\n\x06Status\x12\x12\n\x0eSTATUS_SUCCESS\x10\x00\x12\x11\n\rSTATUS_FAILED\x10\x01\x32\xaa\x02\n\nController\x12\x36\n\x05Start\x12\x12.common.FunctionID\x1a\x19.controller.StartResponse\x12\x31\n\x04\x43\x61ll\x12\x13.common.CallRequest\x1a\x14.common.CallResponse\x12.\n\x04Stop\x12\x12.common.InstanceID\x1a\x12.common.InstanceID\x12?\n\x06Status\x12\x19.controller.StatusRequest\x1a\x18.controller.StatusUpdate0\x01\x12@\n\x07Metrics\x12\x1a.controller.MetricsRequest\x1a\x19.controller.MetricsUpdateB3Z1github.com/3s-rg-codes/HyperFaaS/proto/controllerb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -34,12 +34,12 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'controller.controller_pb2',
 if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'Z1github.com/3s-rg-codes/HyperFaaS/proto/controller'
-  _globals['_VIRTUALIZATIONTYPE']._serialized_start=840
-  _globals['_VIRTUALIZATIONTYPE']._serialized_end=880
-  _globals['_EVENT']._serialized_start=883
-  _globals['_EVENT']._serialized_end=1013
-  _globals['_STATUS']._serialized_start=1015
-  _globals['_STATUS']._serialized_end=1062
+  _globals['_VIRTUALIZATIONTYPE']._serialized_start=1058
+  _globals['_VIRTUALIZATIONTYPE']._serialized_end=1098
+  _globals['_EVENT']._serialized_start=1101
+  _globals['_EVENT']._serialized_end=1231
+  _globals['_STATUS']._serialized_start=1233
+  _globals['_STATUS']._serialized_end=1280
   _globals['_STATUSUPDATE']._serialized_start=98
   _globals['_STATUSUPDATE']._serialized_end=357
   _globals['_STATUSREQUEST']._serialized_start=359
@@ -48,14 +48,16 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_METRICSREQUEST']._serialized_end=424
   _globals['_METRICSUPDATE']._serialized_start=426
   _globals['_METRICSUPDATE']._serialized_end=495
-  _globals['_STATEREQUEST']._serialized_start=497
-  _globals['_STATEREQUEST']._serialized_end=528
-  _globals['_INSTANCESTATE']._serialized_start=530
-  _globals['_INSTANCESTATE']._serialized_end=631
-  _globals['_FUNCTIONSTATE']._serialized_start=634
-  _globals['_FUNCTIONSTATE']._serialized_end=775
-  _globals['_STATERESPONSE']._serialized_start=777
-  _globals['_STATERESPONSE']._serialized_end=838
-  _globals['_CONTROLLER']._serialized_start=1065
-  _globals['_CONTROLLER']._serialized_end=1418
+  _globals['_INSTANCESTATEREQUEST']._serialized_start=498
+  _globals['_INSTANCESTATEREQUEST']._serialized_end=636
+  _globals['_INSTANCESTATE']._serialized_start=638
+  _globals['_INSTANCESTATE']._serialized_end=739
+  _globals['_FUNCTIONSTATE']._serialized_start=742
+  _globals['_FUNCTIONSTATE']._serialized_end=883
+  _globals['_INSTANCESTATERESPONSE']._serialized_start=885
+  _globals['_INSTANCESTATERESPONSE']._serialized_end=954
+  _globals['_STARTRESPONSE']._serialized_start=956
+  _globals['_STARTRESPONSE']._serialized_end=1056
+  _globals['_CONTROLLER']._serialized_start=1283
+  _globals['_CONTROLLER']._serialized_end=1581
 # @@protoc_insertion_point(module_scope)

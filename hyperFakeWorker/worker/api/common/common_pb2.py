@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x13\x63ommon/common.proto\x12\x06\x63ommon\"\x18\n\x05\x45rror\x12\x0f\n\x07message\x18\x01 \x01(\t\"\x18\n\nInstanceID\x12\n\n\x02id\x18\x01 \x01(\t\"\x18\n\nFunctionID\x12\n\n\x02id\x18\x01 \x01(\t\"\x17\n\x08ImageTag\x12\x0b\n\x03tag\x18\x01 \x01(\t\"m\n\x0b\x43\x61llRequest\x12\'\n\x0binstance_id\x18\x01 \x01(\x0b\x32\x12.common.InstanceID\x12\x0c\n\x04\x64\x61ta\x18\x02 \x01(\x0c\x12\'\n\x0b\x66unction_id\x18\x03 \x01(\x0b\x32\x12.common.FunctionID\":\n\x0c\x43\x61llResponse\x12\x0c\n\x04\x64\x61ta\x18\x01 \x01(\x0c\x12\x1c\n\x05\x65rror\x18\x02 \x01(\x0b\x32\r.common.Error\"8\n\x06\x43onfig\x12\x0e\n\x06memory\x18\x01 \x01(\x03\x12\x1e\n\x03\x63pu\x18\x02 \x01(\x0b\x32\x11.common.CPUConfig\"*\n\tCPUConfig\x12\x0e\n\x06period\x18\x01 \x01(\x03\x12\r\n\x05quota\x18\x02 \x01(\x03\x42/Z-github.com/3s-rg-codes/HyperFaaS/proto/commonb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x13\x63ommon/common.proto\x12\x06\x63ommon\"\x18\n\x05\x45rror\x12\x0f\n\x07message\x18\x01 \x01(\t\"\x18\n\nInstanceID\x12\n\n\x02id\x18\x01 \x01(\t\"\x18\n\nFunctionID\x12\n\n\x02id\x18\x01 \x01(\t\"\x17\n\x08ImageTag\x12\x0b\n\x03tag\x18\x01 \x01(\t\"\x81\x01\n\x0b\x43\x61llRequest\x12\x12\n\nrequest_id\x18\x01 \x01(\x03\x12\'\n\x0binstance_id\x18\x02 \x01(\x0b\x32\x12.common.InstanceID\x12\x0c\n\x04\x64\x61ta\x18\x03 \x01(\x0c\x12\'\n\x0b\x66unction_id\x18\x04 \x01(\x0b\x32\x12.common.FunctionID\"w\n\x0c\x43\x61llResponse\x12\x12\n\nrequest_id\x18\x01 \x01(\x03\x12\x0c\n\x04\x64\x61ta\x18\x02 \x01(\x0c\x12\x1c\n\x05\x65rror\x18\x03 \x01(\x0b\x32\r.common.Error\x12\'\n\x0binstance_id\x18\x04 \x01(\x0b\x32\x12.common.InstanceID\"b\n\x06\x43onfig\x12\x0e\n\x06memory\x18\x01 \x01(\x03\x12\x1e\n\x03\x63pu\x18\x02 \x01(\x0b\x32\x11.common.CPUConfig\x12\x0f\n\x07timeout\x18\x03 \x01(\x05\x12\x17\n\x0fmax_concurrency\x18\x04 \x01(\x05\"*\n\tCPUConfig\x12\x0e\n\x06period\x18\x01 \x01(\x03\x12\r\n\x05quota\x18\x02 \x01(\x03\x42/Z-github.com/3s-rg-codes/HyperFaaS/proto/commonb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -40,12 +40,12 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_FUNCTIONID']._serialized_end=107
   _globals['_IMAGETAG']._serialized_start=109
   _globals['_IMAGETAG']._serialized_end=132
-  _globals['_CALLREQUEST']._serialized_start=134
-  _globals['_CALLREQUEST']._serialized_end=243
-  _globals['_CALLRESPONSE']._serialized_start=245
-  _globals['_CALLRESPONSE']._serialized_end=303
-  _globals['_CONFIG']._serialized_start=305
-  _globals['_CONFIG']._serialized_end=361
-  _globals['_CPUCONFIG']._serialized_start=363
-  _globals['_CPUCONFIG']._serialized_end=405
+  _globals['_CALLREQUEST']._serialized_start=135
+  _globals['_CALLREQUEST']._serialized_end=264
+  _globals['_CALLRESPONSE']._serialized_start=266
+  _globals['_CALLRESPONSE']._serialized_end=385
+  _globals['_CONFIG']._serialized_start=387
+  _globals['_CONFIG']._serialized_end=485
+  _globals['_CPUCONFIG']._serialized_start=487
+  _globals['_CPUCONFIG']._serialized_end=529
 # @@protoc_insertion_point(module_scope)

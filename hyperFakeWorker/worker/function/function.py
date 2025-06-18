@@ -6,6 +6,7 @@ from queue import Queue
 from weakref import WeakSet
 
 from . import FunctionIdStr, InstanceIdStr
+from .names import adjectives, names
 from ..api.controller.controller_pb2 import StatusUpdate, Event, Status, FunctionState, InstanceState
 from ..api.common.common_pb2 import InstanceID, FunctionID
 from ..log import logger
@@ -16,11 +17,15 @@ from .image import FunctionImage
 
 class Function():
 
-    def __init__(self, manager: "FunctionManager", function_id: str, instance_id: str, image: FunctionImage):
+    def __init__(self, manager: "FunctionManager", name: str, function_id: str, instance_id: str, image: FunctionImage):
         self.manager = manager
+
         self.created_at = int(datetime.datetime.now().timestamp())
         self.last_worked_at = int(datetime.datetime.now().timestamp())
+
         self.work_lock: threading._RLock = threading.RLock()
+
+        self.name = name
         self.function_id = function_id
         self.instance_id = instance_id
         self.image = image
@@ -53,6 +58,7 @@ class Function():
         hash_source = function_id + str(random.randint(1, 2**31))
         return Function(
             manager=manager,
+            name=f"{random.choice(adjectives)}-{random.choice(names)}",
             function_id=function_id,
             instance_id=sha256(hash_source.encode(errors="ignore")).hexdigest()[0:12],
             image=image
@@ -175,6 +181,13 @@ class FunctionManager():
             except KeyError as e:
                 logger.critical(f"Failed to find instance_id {instance_id} in:\n{self.active_functions.keys()}")
                 raise e
+            
+    def choose_function(self, function_id: FunctionIdStr):
+        with self.function_lock:
+            available_functions = [func for func in self.instances[function_id] if not func.is_active]
+            if len(available_functions) > 0:
+                return available_functions[0]
+            return None
     
     def send_status_update(self, update: StatusUpdate):
         if not isinstance(update, StatusUpdate):

@@ -29,30 +29,40 @@ class ImageTag(_message.Message):
     def __init__(self, tag: _Optional[str] = ...) -> None: ...
 
 class CallRequest(_message.Message):
-    __slots__ = ("instance_id", "data", "function_id")
+    __slots__ = ("request_id", "instance_id", "data", "function_id")
+    REQUEST_ID_FIELD_NUMBER: _ClassVar[int]
     INSTANCE_ID_FIELD_NUMBER: _ClassVar[int]
     DATA_FIELD_NUMBER: _ClassVar[int]
     FUNCTION_ID_FIELD_NUMBER: _ClassVar[int]
+    request_id: int
     instance_id: InstanceID
     data: bytes
     function_id: FunctionID
-    def __init__(self, instance_id: _Optional[_Union[InstanceID, _Mapping]] = ..., data: _Optional[bytes] = ..., function_id: _Optional[_Union[FunctionID, _Mapping]] = ...) -> None: ...
+    def __init__(self, request_id: _Optional[int] = ..., instance_id: _Optional[_Union[InstanceID, _Mapping]] = ..., data: _Optional[bytes] = ..., function_id: _Optional[_Union[FunctionID, _Mapping]] = ...) -> None: ...
 
 class CallResponse(_message.Message):
-    __slots__ = ("data", "error")
+    __slots__ = ("request_id", "data", "error", "instance_id")
+    REQUEST_ID_FIELD_NUMBER: _ClassVar[int]
     DATA_FIELD_NUMBER: _ClassVar[int]
     ERROR_FIELD_NUMBER: _ClassVar[int]
+    INSTANCE_ID_FIELD_NUMBER: _ClassVar[int]
+    request_id: int
     data: bytes
     error: Error
-    def __init__(self, data: _Optional[bytes] = ..., error: _Optional[_Union[Error, _Mapping]] = ...) -> None: ...
+    instance_id: InstanceID
+    def __init__(self, request_id: _Optional[int] = ..., data: _Optional[bytes] = ..., error: _Optional[_Union[Error, _Mapping]] = ..., instance_id: _Optional[_Union[InstanceID, _Mapping]] = ...) -> None: ...
 
 class Config(_message.Message):
-    __slots__ = ("memory", "cpu")
+    __slots__ = ("memory", "cpu", "timeout", "max_concurrency")
     MEMORY_FIELD_NUMBER: _ClassVar[int]
     CPU_FIELD_NUMBER: _ClassVar[int]
+    TIMEOUT_FIELD_NUMBER: _ClassVar[int]
+    MAX_CONCURRENCY_FIELD_NUMBER: _ClassVar[int]
     memory: int
     cpu: CPUConfig
-    def __init__(self, memory: _Optional[int] = ..., cpu: _Optional[_Union[CPUConfig, _Mapping]] = ...) -> None: ...
+    timeout: int
+    max_concurrency: int
+    def __init__(self, memory: _Optional[int] = ..., cpu: _Optional[_Union[CPUConfig, _Mapping]] = ..., timeout: _Optional[int] = ..., max_concurrency: _Optional[int] = ...) -> None: ...
 
 class CPUConfig(_message.Message):
     __slots__ = ("period", "quota")

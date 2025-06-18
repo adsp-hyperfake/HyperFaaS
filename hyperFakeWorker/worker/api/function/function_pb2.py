@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from common import common_pb2 as common_dot_common__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x17\x66unction/function.proto\x12\x08\x66unction\x1a\x13\x63ommon/common.proto\"\x9d\x01\n\x07Payload\x12\x0c\n\x04\x64\x61ta\x18\x01 \x01(\x0c\x12&\n\ninstanceId\x18\x02 \x01(\x0b\x32\x12.common.InstanceID\x12&\n\nfunctionId\x18\x03 \x01(\x0b\x32\x12.common.FunctionID\x12\x16\n\x0e\x66irstExecution\x18\x04 \x01(\x08\x12\x1c\n\x05\x65rror\x18\x05 \x01(\x0b\x32\r.common.Error\"d\n\x04\x43\x61ll\x12\x0c\n\x04\x64\x61ta\x18\x01 \x01(\x0c\x12&\n\ninstanceId\x18\x02 \x01(\x0b\x32\x12.common.InstanceID\x12&\n\nfunctionId\x18\x03 \x01(\x0b\x32\x12.common.FunctionID2=\n\x0f\x46unctionService\x12*\n\x05Ready\x12\x11.function.Payload\x1a\x0e.function.CallB\"Z github.com/3s-rg-codes/hyperfaasb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x17\x66unction/function.proto\x12\x08\x66unction\x1a\x13\x63ommon/common.proto2D\n\x0f\x46unctionService\x12\x31\n\x04\x43\x61ll\x12\x13.common.CallRequest\x1a\x14.common.CallResponseB\"Z github.com/3s-rg-codes/hyperfaasb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -33,10 +33,6 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'function.function_pb2', _gl
 if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'Z github.com/3s-rg-codes/hyperfaas'
-  _globals['_PAYLOAD']._serialized_start=59
-  _globals['_PAYLOAD']._serialized_end=216
-  _globals['_CALL']._serialized_start=218
-  _globals['_CALL']._serialized_end=318
-  _globals['_FUNCTIONSERVICE']._serialized_start=320
-  _globals['_FUNCTIONSERVICE']._serialized_end=381
+  _globals['_FUNCTIONSERVICE']._serialized_start=58
+  _globals['_FUNCTIONSERVICE']._serialized_end=126
 # @@protoc_insertion_point(module_scope)

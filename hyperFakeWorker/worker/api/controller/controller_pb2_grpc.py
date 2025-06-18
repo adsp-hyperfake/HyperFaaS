@@ -38,7 +38,7 @@ class ControllerStub(object):
         self.Start = channel.unary_unary(
                 '/controller.Controller/Start',
                 request_serializer=common_dot_common__pb2.FunctionID.SerializeToString,
-                response_deserializer=common_dot_common__pb2.InstanceID.FromString,
+                response_deserializer=controller_dot_controller__pb2.StartResponse.FromString,
                 _registered_method=True)
         self.Call = channel.unary_unary(
                 '/controller.Controller/Call',
@@ -59,11 +59,6 @@ class ControllerStub(object):
                 '/controller.Controller/Metrics',
                 request_serializer=controller_dot_controller__pb2.MetricsRequest.SerializeToString,
                 response_deserializer=controller_dot_controller__pb2.MetricsUpdate.FromString,
-                _registered_method=True)
-        self.State = channel.unary_unary(
-                '/controller.Controller/State',
-                request_serializer=controller_dot_controller__pb2.StateRequest.SerializeToString,
-                response_deserializer=controller_dot_controller__pb2.StateResponse.FromString,
                 _registered_method=True)
 
 
@@ -95,13 +90,8 @@ class ControllerServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def Metrics(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def State(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """rpc InstanceState (InstanceStateRequest) returns (InstanceStateResponse);
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -112,7 +102,7 @@ def add_ControllerServicer_to_server(servicer, server):
             'Start': grpc.unary_unary_rpc_method_handler(
                     servicer.Start,
                     request_deserializer=common_dot_common__pb2.FunctionID.FromString,
-                    response_serializer=common_dot_common__pb2.InstanceID.SerializeToString,
+                    response_serializer=controller_dot_controller__pb2.StartResponse.SerializeToString,
             ),
             'Call': grpc.unary_unary_rpc_method_handler(
                     servicer.Call,
@@ -133,11 +123,6 @@ def add_ControllerServicer_to_server(servicer, server):
                     servicer.Metrics,
                     request_deserializer=controller_dot_controller__pb2.MetricsRequest.FromString,
                     response_serializer=controller_dot_controller__pb2.MetricsUpdate.SerializeToString,
-            ),
-            'State': grpc.unary_unary_rpc_method_handler(
-                    servicer.State,
-                    request_deserializer=controller_dot_controller__pb2.StateRequest.FromString,
-                    response_serializer=controller_dot_controller__pb2.StateResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -166,7 +151,7 @@ class Controller(object):
             target,
             '/controller.Controller/Start',
             common_dot_common__pb2.FunctionID.SerializeToString,
-            common_dot_common__pb2.InstanceID.FromString,
+            controller_dot_controller__pb2.StartResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -275,33 +260,6 @@ class Controller(object):
             '/controller.Controller/Metrics',
             controller_dot_controller__pb2.MetricsRequest.SerializeToString,
             controller_dot_controller__pb2.MetricsUpdate.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def State(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/controller.Controller/State',
-            controller_dot_controller__pb2.StateRequest.SerializeToString,
-            controller_dot_controller__pb2.StateResponse.FromString,
             options,
             channel_credentials,
             insecure,

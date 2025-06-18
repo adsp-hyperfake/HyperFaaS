@@ -1,9 +1,10 @@
 import grpc
 from traceback import print_exc
+from time import sleep
 
 from ..api.controller import controller_pb2_grpc
 from ..api.common.common_pb2 import FunctionID, InstanceID, CallRequest, CallResponse, Error
-from ..api.controller.controller_pb2 import StatusRequest, StatusUpdate, MetricsRequest, MetricsUpdate, StateRequest, StateResponse
+from ..api.controller.controller_pb2 import StatusRequest, StatusUpdate, MetricsRequest, MetricsUpdate, StartResponse
 from ..api.controller.controller_pb2 import VirtualizationType, Event, Status
 
 from ..log import logger
@@ -30,12 +31,25 @@ class ControllerServicer(controller_pb2_grpc.ControllerServicer):
                     function_id=FunctionID(id=new_function.function_id),
                 )
             )
-            logger.info(f"Scheduled instance {new_function.instance_id} for function {new_function.function_id}")
-            return InstanceID(id=new_function.instance_id)
+            logger.info(f"Scheduled instance {new_function.name} - {new_function.instance_id} for function {new_function.image} - {new_function.function_id}")
+            return StartResponse(instance_id=InstanceID(id=new_function.instance_id), instance_ip="127.0.0.1", instance_name=new_function.name)
     
     def Call(self, request: CallRequest, context: grpc.ServicerContext):
-        logger.debug(f"Got Call for function instance {request.instance_id.id}")
-        func = self._fn_mngr.get_function(request.instance_id.id)
+        logger.debug(f"Got Call for function instance {request.instance_id.id} | {request.function_id.id}")
+        tries = 0
+        while True:
+            if tries > 5:
+                response = CallResponse(
+                    request_id=request.request_id,
+                    error=Error(message="Unable to schedule function call!")
+                )
+                return response
+            func = self._fn_mngr.choose_function(request.function_id.id)
+            tries += 1
+            if func is None:
+                sleep(0.1)
+            else:
+                break
         with func.work_lock:
             try:
                 queued_ts = get_timestamp().ToMilliseconds()
@@ -59,7 +73,9 @@ class ControllerServicer(controller_pb2_grpc.ControllerServicer):
                         )
                     )
                 response = CallResponse(
-                    data=response
+                    request_id=request.request_id,
+                    data=response,
+                    instance_id=InstanceID(id=func.instance_id)
                 )
                 logger.debug(f"Returning response {response.__str__()}")
                 context.set_trailing_metadata(
@@ -74,6 +90,7 @@ class ControllerServicer(controller_pb2_grpc.ControllerServicer):
                 print("Encountered error!")
                 print_exc()
                 response = CallResponse(
+                    request_id=request.request_id,
                     error=Error(message="Encountered Unexpected error when executing function call!")
                 )
             finally:
@@ -106,8 +123,8 @@ class ControllerServicer(controller_pb2_grpc.ControllerServicer):
             cpu_percent_percpu=[1.0,1.0,0.3]
         )
     
-    def State(self, request: StateRequest, context: grpc.ServicerContext):
-        logger.debug(f"Got State request!")
-        return StateResponse(
-            functions=self._fn_mngr.get_state()
-        )
+    # def State(self, request: StateRequest, context: grpc.ServicerContext):
+    #     logger.debug(f"Got State request!")
+    #     return StateResponse(
+    #         functions=self._fn_mngr.get_state()
+    #     )

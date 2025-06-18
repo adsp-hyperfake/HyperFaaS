@@ -73,11 +73,15 @@ class MetricsUpdate(_message.Message):
     cpu_percent_percpu: _containers.RepeatedScalarFieldContainer[float]
     def __init__(self, used_ram_percent: _Optional[float] = ..., cpu_percent_percpu: _Optional[_Iterable[float]] = ...) -> None: ...
 
-class StateRequest(_message.Message):
-    __slots__ = ("node_id",)
-    NODE_ID_FIELD_NUMBER: _ClassVar[int]
-    node_id: str
-    def __init__(self, node_id: _Optional[str] = ...) -> None: ...
+class InstanceStateRequest(_message.Message):
+    __slots__ = ("function_id", "instance_id", "event")
+    FUNCTION_ID_FIELD_NUMBER: _ClassVar[int]
+    INSTANCE_ID_FIELD_NUMBER: _ClassVar[int]
+    EVENT_FIELD_NUMBER: _ClassVar[int]
+    function_id: _common_pb2.FunctionID
+    instance_id: _common_pb2.InstanceID
+    event: Event
+    def __init__(self, function_id: _Optional[_Union[_common_pb2.FunctionID, _Mapping]] = ..., instance_id: _Optional[_Union[_common_pb2.InstanceID, _Mapping]] = ..., event: _Optional[_Union[Event, str]] = ...) -> None: ...
 
 class InstanceState(_message.Message):
     __slots__ = ("instance_id", "is_active", "time_since_last_work", "uptime")
@@ -101,8 +105,18 @@ class FunctionState(_message.Message):
     idle: _containers.RepeatedCompositeFieldContainer[InstanceState]
     def __init__(self, function_id: _Optional[_Union[_common_pb2.FunctionID, _Mapping]] = ..., running: _Optional[_Iterable[_Union[InstanceState, _Mapping]]] = ..., idle: _Optional[_Iterable[_Union[InstanceState, _Mapping]]] = ...) -> None: ...
 
-class StateResponse(_message.Message):
+class InstanceStateResponse(_message.Message):
     __slots__ = ("functions",)
     FUNCTIONS_FIELD_NUMBER: _ClassVar[int]
     functions: _containers.RepeatedCompositeFieldContainer[FunctionState]
     def __init__(self, functions: _Optional[_Iterable[_Union[FunctionState, _Mapping]]] = ...) -> None: ...
+
+class StartResponse(_message.Message):
+    __slots__ = ("instance_id", "instance_ip", "instance_name")
+    INSTANCE_ID_FIELD_NUMBER: _ClassVar[int]
+    INSTANCE_IP_FIELD_NUMBER: _ClassVar[int]
+    INSTANCE_NAME_FIELD_NUMBER: _ClassVar[int]
+    instance_id: _common_pb2.InstanceID
+    instance_ip: str
+    instance_name: str
+    def __init__(self, instance_id: _Optional[_Union[_common_pb2.InstanceID, _Mapping]] = ..., instance_ip: _Optional[str] = ..., instance_name: _Optional[str] = ...) -> None: ...
