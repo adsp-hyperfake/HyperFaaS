@@ -96,7 +96,7 @@ class Function():
 class FunctionManager():
 
     def __init__(self):
-        self.data_lock = threading.RLock()
+        self.function_lock = threading.RLock()
         # instance_id : Function
         self.active_functions: dict[InstanceIdStr, Function] = {}
         # function_id : set[Function]
@@ -105,21 +105,22 @@ class FunctionManager():
 
         self.kvs_client = KVStoreClient("127.0.0.1:8999")
         
+        self.status_lock = threading.RLock()
         self.status_queues: WeakSet[Queue] = WeakSet()
 
     def get_image(self, function_id: FunctionIdStr):
-        with self.data_lock:
+        with self.function_lock:
             if self.images.get(function_id) is None:
                 self.images[function_id] = self.kvs_client.get_image(function_id)
             return self.images[function_id]
 
     def get_num_recently_active_functions(self, function_id: FunctionIdStr) -> int:
-        with self.data_lock:
+        with self.function_lock:
             return len(list(filter(lambda i: i.was_recently_active, self.instances.get(function_id))))
 
     @property
     def num_recently_active_functions(self) -> dict[FunctionIdStr, int]:
-        with self.data_lock:
+        with self.function_lock:
             active_funcs = {}
             for key, value in self.instances.items():
                 active = list(filter(lambda i: i.was_recently_active, value))
@@ -127,12 +128,12 @@ class FunctionManager():
             return active_funcs
 
     def get_num_active_functions(self, function_id: FunctionIdStr) -> int:
-        with self.data_lock:
+        with self.function_lock:
             return len(list(filter(lambda i: i.is_active, self.instances.get(function_id))))
 
     @property
     def num_active_functions(self) -> dict[FunctionIdStr, int]:
-        with self.data_lock:
+        with self.function_lock:
             active_funcs = {}
             for key, value in self.instances.items():
                 active = list(filter(lambda i: i.is_active, value))
@@ -140,19 +141,19 @@ class FunctionManager():
             return active_funcs
     
     def get_num_functions(self, function_id: FunctionIdStr) -> int:
-        with self.data_lock:
+        with self.function_lock:
             return len(self.instances.get(function_id))
 
     @property
     def num_functions(self) -> dict[FunctionIdStr, int]:
-        with self.data_lock:
+        with self.function_lock:
             active_funcs = {}
             for key, value in self.instances.items():
                 active_funcs[key] = len(value)
             return active_funcs
 
     def add_function(self, function: Function):
-        with self.data_lock:
+        with self.function_lock:
             self.active_functions[function.instance_id] = function
 
             if self.instances.get(function.function_id) is None:
@@ -160,7 +161,7 @@ class FunctionManager():
             self.instances[function.function_id].add(function)
 
     def remove_function(self, instance_id: InstanceIdStr):
-        with self.data_lock:
+        with self.function_lock:
             if self.active_functions.get(instance_id) is None:
                 return
             function = self.active_functions[instance_id]
@@ -168,7 +169,7 @@ class FunctionManager():
             return self.active_functions.pop(instance_id)
 
     def get_function(self, instance_id: InstanceIdStr):
-        with self.data_lock:
+        with self.function_lock:
             try:
                 return self.active_functions[instance_id]
             except KeyError as e:
@@ -179,12 +180,14 @@ class FunctionManager():
         if not isinstance(update, StatusUpdate):
             raise TypeError("The sent update must be an actual status update!")
         logger.info(f"Sending status update to {len(self.status_queues)} clients")
-        for q in self.status_queues:
-            q.put(update)
+        with self.status_lock:
+            for q in self.status_queues:
+                q.put(update)
             
     def get_status_updates(self):
         updates_queue: Queue[StatusUpdate] = Queue()
-        self.status_queues.add(updates_queue)
+        with self.status_lock:
+            self.status_queues.add(updates_queue)
         
         try:
             while True:
@@ -192,11 +195,12 @@ class FunctionManager():
                 yield update
                 updates_queue.task_done()
         finally:
-            self.status_queues.remove(updates_queue)
+            with self.status_lock:
+                self.status_queues.remove(updates_queue)
 
 
     def get_state(self) -> list[FunctionState]:
-        with self.data_lock:
+        with self.function_lock:
             state = []
             for function_id in self.instances.keys():
                 functions = self.instances[function_id]

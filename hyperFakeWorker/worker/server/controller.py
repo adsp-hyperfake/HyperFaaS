@@ -20,7 +20,7 @@ class ControllerServicer(controller_pb2_grpc.ControllerServicer):
     def Start(self, request: FunctionID, context: grpc.ServicerContext):
         logger.debug(f"Got Start call for function {request.id}")
         new_function = Function.create_new(self._fn_mngr, request.id, self._fn_mngr.get_image(request.id))
-        with self._fn_mngr.data_lock:
+        with self._fn_mngr.function_lock:
             self._fn_mngr.add_function(new_function)
             self._fn_mngr.send_status_update(
                 StatusUpdate(
