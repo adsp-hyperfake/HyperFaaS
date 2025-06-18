@@ -122,9 +122,3 @@ class ControllerServicer(controller_pb2_grpc.ControllerServicer):
             used_ram_percent=1000.0,
             cpu_percent_percpu=[1.0,1.0,0.3]
         )
-    
-    # def State(self, request: StateRequest, context: grpc.ServicerContext):
-    #     logger.debug(f"Got State request!")
-    #     return StateResponse(
-    #         functions=self._fn_mngr.get_state()
-    #     )

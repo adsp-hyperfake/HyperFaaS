@@ -192,7 +192,6 @@ class FunctionManager():
     def send_status_update(self, update: StatusUpdate):
         if not isinstance(update, StatusUpdate):
             raise TypeError("The sent update must be an actual status update!")
-        logger.info(f"Sending status update to {len(self.status_queues)} clients")
         with self.status_lock:
             for q in self.status_queues:
                 q.put(update)
