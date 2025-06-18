@@ -50,7 +50,7 @@ class Function():
 
     @staticmethod
     def create_new(manager: "FunctionManager", function_id: str, image: FunctionImage):
-        hash_source = function_id + str(random.randint(1, 2^31))
+        hash_source = function_id + str(random.randint(1, 2**31))
         return Function(
             manager=manager,
             function_id=function_id,
