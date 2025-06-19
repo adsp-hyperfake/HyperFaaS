@@ -60,7 +60,7 @@ class CustomDataset(Dataset):
 
 
 class MultiOutputNetwork(nn.Module):
-    """Multi-output neural MultiOutputNetworkwork"""
+    """Multi-output neural network"""
 
     def __init__(
         self,
@@ -84,7 +84,7 @@ class MultiOutputNetwork(nn.Module):
         # Output layer
         layers.append(nn.Linear(prev_dim, output_dim))
 
-        self.MultiOutputNetworkwork = nn.Sequential(*layers)
+        self.model = nn.Sequential(*layers)
 
         # Initialize weights
         self._initialize_weights()
@@ -93,14 +93,14 @@ class MultiOutputNetwork(nn.Module):
         """Initialize weights."""
         # might need further tuning
         # https://stackoverflow.com/questions/49433936/how-do-i-initialize-weights-in-pytorch
-        for module in self.MultiOutputNetworkwork:
+        for module in self.model:
             if isinstance(module, nn.Linear):
                 nn.init.xavier_uniform_(module.weight)
                 nn.init.zeros_(module.bias)
 
-    def forward(self, input):
+    def forward(self, x):
         """Forward pass through the network."""
-        return self.MultiOutputNetworkwork(input)
+        return self.model(x)
 
 
 def create_sample_data(n_samples=10000):
@@ -296,6 +296,7 @@ def export_model_to_onnx(model, target_path):
         output_names=['output'],
         do_constant_folding=True, # Optimize the model
     )
+    print(f"Exported model to {target_path}.")
 
 def predict(model, scaler_X, scaler_y, input_data):
     """Make predictions using the trained model."""
@@ -332,10 +333,10 @@ def main(table_name, func_tag, target_path, db_path=None):
         X, y = load_data_from_db(db_path, table_name, func_tag)
     # Split data
     X_temp, X_test, y_temp, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42
+        X, y, test_size=0.35, random_state=42
     )
     X_train, X_val, y_train, y_val = train_test_split(
-        X_temp, y_temp, test_size=0.25, random_state=42
+        X_temp, y_temp, test_size=0.5, random_state=42
     )
 
     # Create datasets and data loaders
