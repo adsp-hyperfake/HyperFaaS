@@ -16,6 +16,7 @@ import (
 	cr "github.com/3s-rg-codes/HyperFaaS/pkg/worker/containerRuntime"
 	dockerRuntime "github.com/3s-rg-codes/HyperFaaS/pkg/worker/containerRuntime/docker"
 	"github.com/3s-rg-codes/HyperFaaS/pkg/worker/controller"
+	"github.com/caarlos0/env/v11"
 )
 
 type WorkerConfig struct {
@@ -40,7 +41,7 @@ type WorkerConfig struct {
 	}
 }
 
-func parseArgs() (wc WorkerConfig) {
+func parseArgs(wc *WorkerConfig) {
 	flag.StringVar(&(wc.General.Address), "address", "", "Worker address. (Env: WORKER_ADDRESS)")
 	flag.StringVar(&(wc.General.CallerServerAddress), "caller-server-address", "", "Caller server address. (Env: CALLER_SERVER_ADDRESS)")
 	flag.StringVar(&(wc.General.DatabaseType), "database-type", "", "Type of the database. (Env: DATABASE_TYPE)")
@@ -53,7 +54,6 @@ func parseArgs() (wc WorkerConfig) {
 	flag.BoolVar(&(wc.Runtime.Containerized), "containerized", false, "Use socket to connect to Docker. (Env: RUNTIME_CONTAINERIZED)")
 	flag.Int64Var(&(wc.Stats.UpdateBufferSize), "update-buffer-size", 10000, "Update buffer size. (Env: UPDATE_BUFFER_SIZE)")
 	flag.Parse()
-	return
 }
 
 func setupLogger(config WorkerConfig) *slog.Logger {
@@ -110,7 +110,14 @@ func main() {
 	go func() {
 		log.Println(http.ListenAndServe("localhost:6060", nil))
 	}()
-	wc := parseArgs()
+
+	var wc WorkerConfig
+	err := env.Parse(&wc)
+	if err != nil {
+		log.Fatalf("Failed to parse the worker config from the environemnt: %e", err)
+	}
+	parseArgs(&wc)
+
 	logger := setupLogger(wc)
 
 	logger.Info("Current configuration", "config", wc)
