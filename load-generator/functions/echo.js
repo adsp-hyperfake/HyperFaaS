@@ -60,9 +60,11 @@ export function echoSetup(client) {
 // Echo function execution
 export function echoFunction(setupData) {
   const echoFunctionId = setupData.echo;
+  if (__ITER === 0) {
   client.connect(setupData.address, {
     plaintext: true
   });
+  }
   const data = encoding.b64encode(randomBytes(getRandomInt(512, 2048)));
   const response = client.invoke('leaf.Leaf/ScheduleCall', {
     functionID: { id: echoFunctionId },
@@ -98,6 +100,4 @@ export function echoFunction(setupData) {
     },
     'Data sent is the same as the data that was received': (r) => r && r.message && r.message.data === data
   }); */
-
-  client.close();
 }

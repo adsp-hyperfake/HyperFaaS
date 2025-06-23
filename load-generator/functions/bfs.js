@@ -65,10 +65,11 @@ export function bfsSetup(client) {
 
 export function bfsFunction(setupData) {
   const bfsFunctionId = setupData.bfs;
+  if (__ITER === 0) {
     client.connect(setupData.address, {
     plaintext: true
   });
-
+  }
   const size = 100;
 
   // Create input data structure
@@ -105,6 +106,4 @@ export function bfsFunction(setupData) {
   leafGotRequestTimestamp.add(isoToMs(response.trailers[leafGotRequestTimestampKey]));
   leafScheduledCallTimestamp.add(isoToMs(response.trailers[leafScheduledCallTimestampKey]));
   functionParametersMetric.add(0, { functionParameters: JSON.stringify(inputData) });
-  functionProcessingTime.add(isoToMs(response.trailers[functionProcessingTimeKey]));
-  client.close();
 }

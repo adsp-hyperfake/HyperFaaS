@@ -63,9 +63,11 @@ export function thumbnailerSetup(client) {
 // Thumbnailer function execution
 export function thumbnailerFunction(setupData) {
   const { thumbnailerFunctionId, imageDataB64 } = setupData.thumbnailer;
+  if (__ITER === 0) {
   client.connect(setupData.address, {
     plaintext: true
   });
+  }
   // Create input data structure with random dimensions
   const width = getRandomInt(50,200)  // Random width between 50 and 200
   const height = getRandomInt(50, 200); // Random height between 50 and 200
@@ -101,6 +103,4 @@ export function thumbnailerFunction(setupData) {
   leafGotRequestTimestamp.add(isoToMs(response.trailers[leafGotRequestTimestampKey]));
   leafScheduledCallTimestamp.add(isoToMs(response.trailers[leafScheduledCallTimestampKey]));
   functionParametersMetric.add(0, { functionParameters: JSON.stringify(inputData) });
-  functionProcessingTime.add(isoToMs(response.trailers[functionProcessingTimeKey]));
-  client.close();
 }
