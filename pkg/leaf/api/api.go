@@ -121,13 +121,15 @@ func (s *LeafServer) ScheduleCall(ctx context.Context, req *leaf.ScheduleCallReq
 	metricChan := s.functionMetricChans[state.FunctionID(req.FunctionID.Id)]
 	s.functionMetricChansMutex.RUnlock()
 	metricChan <- true
+	defer func() {
+		metricChan <- false
+	}()
 	// Note: we send function id as instance id because I havent updated the proto yet. But the call instance endpoint is now call function. worker handles the instance id.
 	leafScheduledCallTimestamp := time.Now()
 	resp, callMetadata, err := s.callWorker(ctx, randWorker, state.FunctionID(req.FunctionID.Id), state.InstanceID(req.FunctionID.Id), req)
 	if err != nil {
 		return nil, err
 	}
-	metricChan <- false
 
 	defer func() {
 		trailer := metadata.New(map[string]string{
