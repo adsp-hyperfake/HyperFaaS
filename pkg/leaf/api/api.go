@@ -84,7 +84,10 @@ func (s *LeafServer) CreateFunction(ctx context.Context, req *leaf.CreateFunctio
 
 func (s *LeafServer) ScheduleCall(ctx context.Context, req *leaf.ScheduleCallRequest) (*leaf.ScheduleCallResponse, error) {
 	leafGotRequestTimestamp := time.Now()
-	autoscaler := s.state.GetAutoscaler(state.FunctionID(req.FunctionID.Id))
+	autoscaler, ok := s.state.GetAutoscaler(state.FunctionID(req.FunctionID.Id))
+	if !ok {
+		return nil, status.Errorf(codes.NotFound, "function id not found")
+	}
 	if autoscaler.IsScaledDown() {
 		err := autoscaler.ForceScaleUp(ctx)
 		if err != nil {
