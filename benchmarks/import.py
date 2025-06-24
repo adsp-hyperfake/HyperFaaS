@@ -82,12 +82,22 @@ def import_function_images(conn, json_file='generated_scenarios.json'):
     
     cursor = conn.cursor()
     
-    # Extract function IDs and image tags from metadata
-    function_images = [
-        (data['metadata']['bfsFunctionId'], data['metadata']['configuration']['BFS_IMAGE_TAG']),
-        (data['metadata']['echoFunctionId'], data['metadata']['configuration']['ECHO_IMAGE_TAG']),
-        (data['metadata']['thumbnailerFunctionId'], data['metadata']['configuration']['THUMBNAILER_IMAGE_TAG'])
-    ]
+    # Handle both single run format and multiple runs format
+    if 'runs' in data:
+        # Multiple runs format - use the first run's metadata for function IDs
+        first_run = data['runs'][0]
+        function_images = [
+            (first_run['metadata']['bfsFunctionId'], first_run['metadata']['configuration']['BFS_IMAGE_TAG']),
+            (first_run['metadata']['echoFunctionId'], first_run['metadata']['configuration']['ECHO_IMAGE_TAG']),
+            (first_run['metadata']['thumbnailerFunctionId'], first_run['metadata']['configuration']['THUMBNAILER_IMAGE_TAG'])
+        ]
+    else:
+        # Single run format (backward compatibility)
+        function_images = [
+            (data['metadata']['bfsFunctionId'], data['metadata']['configuration']['BFS_IMAGE_TAG']),
+            (data['metadata']['echoFunctionId'], data['metadata']['configuration']['ECHO_IMAGE_TAG']),
+            (data['metadata']['thumbnailerFunctionId'], data['metadata']['configuration']['THUMBNAILER_IMAGE_TAG'])
+        ]
     
     # Insert or replace function images
     cursor.executemany('''
@@ -157,7 +167,19 @@ def import_csv_to_sqlite(csv_file='test_results.csv', db_file='metrics.db', json
             # The metadata can be used as a request_id
             # Transform metadata string into consistent request_key format
             metadata_dict = {k: v for part in metadata.split('&') for k, v in [part.split('=')]}
-            request_key = f"vu={metadata_dict['vu']}&iter={metadata_dict['iter']}"
+            
+            # Create unique request key with run_id if available
+            run_id = None
+            if row['extra_tags']:
+                tags = parse_tags(row['extra_tags'])
+                if 'run_id' in tags:
+                    run_id = tags['run_id']
+            
+            if run_id:
+                request_key = f"run={run_id}&vu={metadata_dict['vu']}&iter={metadata_dict['iter']}"
+            else:
+                # Fallback for backward compatibility
+                request_key = f"vu={metadata_dict['vu']}&iter={metadata_dict['iter']}"
             
             # Store common metadata for this request
             requests[request_key]['scenario'] = scenario
