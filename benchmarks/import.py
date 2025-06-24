@@ -178,7 +178,7 @@ def import_csv_to_sqlite(csv_file='test_results.csv', db_file='metrics.db', json
             if run_id:
                 request_key = f"run={run_id}&vu={metadata_dict['vu']}&iter={metadata_dict['iter']}"
             else:
-                # Fallback for backward compatibility
+                # Single run format
                 request_key = f"vu={metadata_dict['vu']}&iter={metadata_dict['iter']}"
             
             # Store common metadata for this request
@@ -263,29 +263,9 @@ def import_csv_to_sqlite(csv_file='test_results.csv', db_file='metrics.db', json
         ))
     
     conn.commit()
+
+    print(f"Imported {len(requests)} requests into the database")
     
-    # Print statistics
-    cursor.execute("SELECT COUNT(*) FROM metrics")
-    count = cursor.fetchone()[0]
-    print(f"Imported {count} unique requests into the database")
-    
-    # Sample query to verify data
-    cursor.execute("""
-    SELECT scenario, COUNT(*), AVG(grpc_req_duration) as avg_duration 
-    FROM metrics 
-    GROUP BY scenario
-    """)
-    print("\nScenario statistics:")
-    for row in cursor.fetchall():
-        try:
-            print(f"  {row[0]}: {row[1]} requests, avg duration: {row[2]:.3f}ms")
-        except:
-            pass
-    try:
-        add_function_ids_to_cpu_mem_stats(conn)
-    except sqlite3.OperationalError as e:
-        print(f"Error adding function IDs to cpu_mem_stats: {e}")
-        print("Did you forget to run the metrics-client? [just metrics-client]")
     conn.close()
 
 if __name__ == "__main__":
@@ -295,6 +275,14 @@ if __name__ == "__main__":
     parser.add_argument('--csv', default='test_results.csv', help='Path to CSV file')
     parser.add_argument('--db', default='metrics.db', help='Path to SQLite database')
     parser.add_argument('--json', default='generated_scenarios.json', help='Path to scenarios JSON file')
-    
+    parser.add_argument('--add-function-ids', default=False, help='Add function IDs to cpu_mem_stats table')
     args = parser.parse_args()
     import_csv_to_sqlite(args.csv, args.db, args.json)
+    if args.add_function_ids:
+        conn = sqlite3.connect(args.db)
+        try:
+            add_function_ids_to_cpu_mem_stats(conn)
+        except sqlite3.OperationalError as e:
+            print(f"Error adding function IDs to cpu_mem_stats: {e}")
+            print("Did you forget to run the metrics-client? [just metrics-client]")
+        conn.close()
