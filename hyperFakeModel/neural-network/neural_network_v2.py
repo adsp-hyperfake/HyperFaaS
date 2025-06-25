@@ -289,8 +289,8 @@ def export_model_to_onnx(model, target_path):
     model.eval()
     dummy_input = torch.zeros(1, 5)
     torch.onnx.export(
-        model,
-        dummy_input,
+        model.to(DEVICE),
+        dummy_input.to(DEVICE),
         target_path,
         input_names=['input'],
         output_names=['output'],
