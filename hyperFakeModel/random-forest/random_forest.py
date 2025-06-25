@@ -44,29 +44,27 @@ def load_data_from_db(db_path, table_name, func_tag):
     return X, y
 
 
-def train_and_evaluate(model, X_train, y_train, X_val, y_val, X_test, y_test):
-    """Train the model and evaluate on validation and test sets."""
-    model.fit(X_train, y_train)
+def get_splits(X, y, seed=42):
+    """Split data into train, validation, and test sets."""
+    # 35% test, 50% of remaining for validation
+    X_temp, X_test, y_temp, y_test = train_test_split(
+        X, y, test_size=0.35, random_state=seed
+    )
+    X_train, X_val, y_train, y_val = train_test_split(
+        X_temp, y_temp, test_size=0.5, random_state=seed
+    )
+    return X_train, X_val, X_test, y_train, y_val, y_test
 
-    # Validation metrics
-    y_val_pred = model.predict(X_val)
-    metrics_val = {
-        "MSE": mean_squared_error(y_val, y_val_pred),
-        "RMSE": np.sqrt(mean_squared_error(y_val, y_val_pred)),
-        "MAE": mean_absolute_error(y_val, y_val_pred),
-        "R2": r2_score(y_val, y_val_pred),
+
+def compute_metrics(model, X, y):
+    """Compute regression metrics for a model and dataset."""
+    y_pred = model.predict(X)
+    return {
+        "MSE": mean_squared_error(y, y_pred),
+        "RMSE": np.sqrt(mean_squared_error(y, y_pred)),
+        "MAE": mean_absolute_error(y, y_pred),
+        "R2": r2_score(y, y_pred),
     }
-
-    # Test metrics
-    y_test_pred = model.predict(X_test)
-    metrics_test = {
-        "MSE": mean_squared_error(y_test, y_test_pred),
-        "RMSE": np.sqrt(mean_squared_error(y_test, y_test_pred)),
-        "MAE": mean_absolute_error(y_test, y_test_pred),
-        "R2": r2_score(y_test, y_test_pred),
-    }
-
-    return metrics_val, metrics_test
 
 
 def export_model_to_onnx(model, input_dim, target_path):
@@ -95,20 +93,17 @@ def main(table_name, func_tag, target_path, db_path):
     X, y = load_data_from_db(db_path, table_name, func_tag)
 
     # Split into train/validation/test
-    X_temp, X_test, y_temp, y_test = train_test_split(
-        X, y, test_size=0.35, random_state=42
-    )
-    X_train, X_val, y_train, y_val = train_test_split(
-        X_temp, y_temp, test_size=0.5, random_state=42
-    )
+    X_train, X_val, X_test, y_train, y_val, y_test = get_splits(X, y, seed=42)
 
-    # Train and evaluate
+    # Train model
     input_dim = X_train.shape[1]
     model = RandomForestRegressor(n_estimators=100, random_state=42)
-    metrics_val, metrics_test = train_and_evaluate(
-        model, X_train, y_train, X_val, y_val, X_test, y_test
-    )
+    model.fit(X_train, y_train)
 
+    # Evaluate on validation and test sets
+    metrics_val = compute_metrics(model, X_val, y_val)
+    metrics_test = compute_metrics(model, X_test, y_test)
+    
     # Print results
     print("=" * 40)
     print(f"Validation results for {func_tag}: {metrics_val}")
