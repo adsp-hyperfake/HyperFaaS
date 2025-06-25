@@ -7,6 +7,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from skl2onnx import convert_sklearn
 from skl2onnx.common.data_types import FloatTensorType
+import onnx
+from datetime import datetime
 
 # Feature and target column definitions
 INPUT_COLS = [
@@ -30,6 +32,12 @@ def load_data_from_db(db_path, table_name, func_tag):
     query = f"SELECT {', '.join(INPUT_COLS + OUTPUT_COLS)} FROM {table_name} WHERE function_image_tag = ?"
     df = pd.read_sql_query(query, conn, params=(func_tag,))
     conn.close()
+
+    if df.empty:
+        raise ValueError(f"No rows found for tag '{func_tag}'")
+    if df.isnull().any().any():
+        df = df.dropna()
+        
     X = df[INPUT_COLS].values
     y = df[OUTPUT_COLS].values
     print(f"Loaded {len(X)} rows for tag '{func_tag}'")
@@ -63,8 +71,20 @@ def train_and_evaluate(model, X_train, y_train, X_val, y_val, X_test, y_test):
 
 def export_model_to_onnx(model, input_dim, target_path):
     """Export the trained scikit-learn model to ONNX format."""
+    # Ensure the output directory exists
+    dirpath = os.path.dirname(target_path)
+    if dirpath:
+        os.makedirs(dirpath, exist_ok=True)
     initial_types = [("input", FloatTensorType([None, input_dim]))]
     onnx_model = convert_sklearn(model, initial_types=initial_types)
+    metadata = {
+        "features": ",".join(INPUT_COLS),
+        "targets": ",".join(OUTPUT_COLS),
+        "training_date": datetime.now().isoformat(),
+        "output_shape": f"[None, {len(OUTPUT_COLS)}]"
+    }
+    for k, v in metadata.items():
+        onnx_model.metadata_props.add(key=k, value=v)
     with open(target_path, "wb") as f:
         f.write(onnx_model.SerializeToString())
     print(f"Exported model to '{target_path}'")
