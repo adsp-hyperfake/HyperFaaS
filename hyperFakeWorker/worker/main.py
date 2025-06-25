@@ -1,11 +1,12 @@
 #!/bin/python
 from pathlib import Path
+import logging
 
 import click
 
 from .api import add_proto_definitions
-from .log import logger, set_log_level
 from .config import WorkerConfig
+from .log import setup_logger
 
 add_proto_definitions()
 
@@ -24,14 +25,14 @@ add_proto_definitions()
 @click.option("-m", "--model", "model", multiple=True, default=[], type=click.Path(resolve_path=True, path_type=Path, dir_okay=False, exists=True))
 @click.pass_context
 def main(ctx, address, database_type, runtime, timeout, auto_remove, log_level, log_format, log_file, containerized, update_buffer_size, model):
-    set_log_level(log_level, log_file)
+    setup_logger(log_level, log_file)
 
-    db_address = "http://localhost:8999"
+    db_address = "localhost:8999"
     if containerized:
-        db_address = "http://database:8999/"
+        db_address = "database:8999/"
 
     # Pass context to other commands
-    ctx.ojb = WorkerConfig(
+    ctx.obj = WorkerConfig(
         # General
         address=address or "[::]:50051",
         database_type=database_type or "http",
@@ -58,9 +59,8 @@ def main(ctx, address, database_type, runtime, timeout, auto_remove, log_level, 
 
 
 @main.command()
-@click.pass_context
-def server(ctx):
-    config: WorkerConfig = ctx.obj
+@click.pass_obj
+def server(config: WorkerConfig):
     from .server.server import serve
 
     serve(config)
@@ -69,7 +69,6 @@ def server(ctx):
 @main.command()
 @click.pass_context
 def client(ctx):
-    config: WorkerConfig = ctx.obj
     import grpc
 
     from .api.common.common_pb2 import CallRequest, CallResponse, FunctionID, InstanceID
@@ -78,6 +77,7 @@ def client(ctx):
     channel = grpc.insecure_channel("localhost:50051")
     stub = ControllerStub(channel)
 
+    logger = logging.getLogger()
     logger.info("Testing grpc server with Status stream...")
 
     # Example: stream status updates for a node
@@ -96,20 +96,29 @@ def test_call(ctx):
     from .api.common.common_pb2 import CallRequest, FunctionID, InstanceID
     from .api.controller.controller_pb2_grpc import ControllerStub
 
+    logger = logging.getLogger()
     config: WorkerConfig = ctx.obj
 
     # Register the function in the key-value store first
     function_id_str = "hyperfaas-hello:latest"
     kv_url = config.db_address
+    if not kv_url.startswith("http://"):
+        kv_url = f"http://{kv_url}"
     function_metadata = {
-        "function_id": function_id_str,
-        "image": "dummy-image:latest"
+        "image_tag": function_id_str,
+        "config": {
+            "mem_limit": 128,
+            "cpu_quota": 100000,
+            "cpu_period": 100000,
+            "timeout": 10,
+            "max_concurrency": 1
+        }
     }
     try:
         response = httpx.post(kv_url, json=function_metadata)
         response.raise_for_status()
         data = response.json()
-        # Expecting the store to return a JSON with the function id, e.g. {"function_id": "..."}
+        # Expecting the store to return a JSON with the function id, e.g. {"FunctionID": "..."}
         real_function_id = data.get("function_id", function_id_str)
         logger.info(
             f"Registered function {real_function_id} in key-value store.")

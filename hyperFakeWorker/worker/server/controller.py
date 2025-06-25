@@ -3,7 +3,7 @@ from traceback import print_exc
 from time import sleep
 from pathlib import Path
 
-from hyperFakeWorker.worker.config import WorkerConfig
+from ..config import WorkerConfig
 
 from ..api.controller import controller_pb2_grpc
 from ..api.common.common_pb2 import FunctionID, InstanceID, CallRequest, CallResponse, Error
