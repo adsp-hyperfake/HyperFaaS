@@ -11,7 +11,7 @@ class ONNXModelInferer():
             model_path (Path): The path to the ONNX model file.
         """
         try:
-            self.model = ort.InferenceSession(model_path)
+            self.model = ort.InferenceSession(model_path, providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
         except Exception as e:
             raise RuntimeError(f"Failed to load ONNX model from {model_path}: {e}")
         
