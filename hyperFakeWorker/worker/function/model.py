@@ -32,6 +32,10 @@ class FunctionModelOutput():
     @staticmethod
     def from_tensor(tensor: np.ndarray) -> "FunctionModelOutput":
         values = tensor.flatten()
+
+        if values.size != 3:
+            raise ValueError(f"Expected 3 otuput values, got {values.size}: {values}")
+
         return FunctionModelOutput(
             function_runtime=int(values[0]),
             cpu_usage=float(values[1]),
@@ -50,7 +54,12 @@ class FunctionModelInferer(ONNXModelInferer):
         """
         tensor_input = input_data.as_tensor()
 
-        input_name = self.model.get_inputs()[0].name
+        input_names = self.model.get_inputs()
+
+        if len(input_names) != 1:
+            raise ValueError(f"Expected exactly one input in the model, got {len(input_names)}.")
+
+        input_name = input_names[0].name
 
         outputs = self.model.run(None, {input_name: tensor_input})
 
