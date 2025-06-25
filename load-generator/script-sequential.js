@@ -198,9 +198,6 @@ export function setup() {
   };
 }
 
-
-
-// Export K6 options with run_id in system tags
 export const options = {
   scenarios: data[2],
   systemTags: ['error', 'group', 'proto', 'scenario', 'service', 'subproto', 'extra_tags', 'metadata', 'vu', 'iter']
