@@ -72,14 +72,14 @@ const data = new SharedArray('data', function() {
         configPrefix: 'ECHO',
         imageTag: config.ECHO_IMAGE_TAG,
         functionId: config.ECHO_FUNCTION_ID
-    }/* ,
+    },
     {
         name: 'thumbnailer',
         exec: 'thumbnailerFunction',
         configPrefix: 'THUMBNAILER',
         imageTag: config.THUMBNAILER_IMAGE_TAG,
         functionId: config.THUMBNAILER_FUNCTION_ID
-    } */
+    }
     ];
 
     // Initialize randomizer with workloadSeed for reproducibility
