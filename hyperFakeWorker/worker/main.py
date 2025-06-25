@@ -1,50 +1,139 @@
 #!/bin/python
-from .api import add_proto_definitions
-add_proto_definitions()
-
 from pathlib import Path
 
 import click
 
-from .log import logger
+from .api import add_proto_definitions
+from .log import logger, set_log_level
+from .config import WorkerConfig
+
+add_proto_definitions()
+
 
 @click.group()
-def main():
-    pass
+@click.option('--address', default='', help='Worker address.')
+@click.option('--database-type', default='http', help='Type of the database.')
+@click.option('--runtime', default='docker', help='Container runtime type.')
+@click.option('--timeout', default=20, type=int, help='Timeout in seconds before leafnode listeners are removed from status stream updates.')
+@click.option('--auto-remove', is_flag=True, help='Auto remove containers.')
+@click.option('--log-level', default='info', help='Log level (debug, info, warn, error)')
+@click.option('--log-format', default='text', help='Log format (json or text)')
+@click.option('--log-file', default=None, help='Log file path (defaults to stdout)')
+@click.option('--containerized', is_flag=True, help='Use socket to connect to Docker.')
+@click.option('--update-buffer-size', default=10000, type=int, help='Update buffer size.')
+@click.option("-m", "--model", "model", multiple=True, default=[], type=click.Path(resolve_path=True, path_type=Path, dir_okay=False, exists=True))
+@click.pass_context
+def main(ctx, address, database_type, runtime, timeout, auto_remove, log_level, log_format, log_file, containerized, update_buffer_size, model):
+    set_log_level(log_level, log_file)
+
+    db_address = "http://localhost:8999"
+    if containerized:
+        db_address = "http://database:8999/"
+
+    # Pass context to other commands
+    ctx.ojb = WorkerConfig(
+        # General
+        address=address or "[::]:50051",
+        database_type=database_type or "http",
+        timeout=timeout,  # not used
+
+        # Runtime
+        runtime=runtime,  # not used
+        auto_remove=auto_remove,  # not used
+        containerized=containerized,
+
+        # Log
+        log_level=log_level,
+        log_format=log_format,  # not implemented
+        log_file=log_file,
+
+        update_buffer_size=update_buffer_size,
+
+        # Extra parameters
+        db_address=db_address,
+
+        # Models
+        models=model
+    )
+
 
 @main.command()
-@click.option("-m", "--model", "model", multiple=True, default=[], type=click.Path(resolve_path=True, path_type=Path, dir_okay=False, exists=True))
-def server(model: list[Path]):
+@click.pass_context
+def server(ctx):
+    config: WorkerConfig = ctx.obj
     from .server.server import serve
 
-    serve(model)
+    serve(config)
+
 
 @main.command()
-def client():
-    
+@click.pass_context
+def client(ctx):
+    config: WorkerConfig = ctx.obj
     import grpc
+
+    from .api.common.common_pb2 import CallRequest, CallResponse, FunctionID, InstanceID
+    from .api.controller.controller_pb2 import StatusRequest, StatusUpdate
     from .api.controller.controller_pb2_grpc import ControllerStub
-    from .api.controller.controller_pb2 import StateRequest, StateResponse
-    from .api.common.common_pb2 import FunctionID, InstanceID, CallRequest, CallResponse
     channel = grpc.insecure_channel("localhost:50051")
     stub = ControllerStub(channel)
 
-    logger.info("Testing grpc server...")
+    logger.info("Testing grpc server with Status stream...")
 
-    state: StateResponse = stub.State(StateRequest(node_id="12345"))
-    for function in state.functions:
-        print(f"State of functions: {function.function_id}")
-        print(f"Checking {len(function.idle)} idle function instances:")
-        for func in function.idle:
-            print(f"Checking instance {func.instance_id}: {func}")
-            call_future = stub.Call(CallRequest(instance_id=InstanceID(id=func.instance_id), function_id=function.function_id))
-            print(call_future)
-        print(f"Checking {len(function.running)} running function instances:")
-        for func in function.running:
-            print(f"Checking instance {func.instance_id}: {func}")
-            call_future = stub.Call(CallRequest(instance_id=InstanceID(id=func.instance_id), function_id=function.function_id))
-            print(call_future)
-    
+    # Example: stream status updates for a node
+    status_stream = stub.Status(StatusRequest(nodeID="12345"))
+    for status_update in status_stream:
+        print(
+            f"Status update: instance_id={status_update.instance_id.id}, function_id={status_update.function_id.id}, event={status_update.event}, status={status_update.status}")
+
+
+@main.command()
+@click.pass_context
+def test_call(ctx):
+    import grpc
+    import httpx
+
+    from .api.common.common_pb2 import CallRequest, FunctionID, InstanceID
+    from .api.controller.controller_pb2_grpc import ControllerStub
+
+    config: WorkerConfig = ctx.obj
+
+    # Register the function in the key-value store first
+    function_id_str = "hyperfaas-hello:latest"
+    kv_url = config.db_address
+    function_metadata = {
+        "function_id": function_id_str,
+        "image": "dummy-image:latest"
+    }
+    try:
+        response = httpx.post(kv_url, json=function_metadata)
+        response.raise_for_status()
+        data = response.json()
+        # Expecting the store to return a JSON with the function id, e.g. {"function_id": "..."}
+        real_function_id = data.get("function_id", function_id_str)
+        logger.info(
+            f"Registered function {real_function_id} in key-value store.")
+    except Exception as e:
+        logger.error(f"Failed to register function in key-value store: {e}")
+        real_function_id = function_id_str
+
+    # Connect to the worker
+    channel = grpc.insecure_channel("localhost:50051")
+    stub = ControllerStub(channel)
+
+    # Start a function instance
+    function_id = FunctionID(id=real_function_id)
+    start_response = stub.Start(function_id)
+    instance_id = start_response.instance_id.id
+
+    # Call the function
+    call_request = CallRequest(
+        function_id=function_id,
+        instance_id=InstanceID(id=instance_id),
+        data=b"hello"
+    )
+    response = stub.Call(call_request)
+    print("Function call response:", response)
 
 
 if __name__ == "__main__":
