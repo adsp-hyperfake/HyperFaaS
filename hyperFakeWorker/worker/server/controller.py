@@ -2,6 +2,8 @@ import grpc
 from traceback import print_exc
 from time import sleep
 
+from hyperFakeWorker.worker.config import WorkerConfig
+
 from ..api.controller import controller_pb2_grpc
 from ..api.common.common_pb2 import FunctionID, InstanceID, CallRequest, CallResponse, Error
 from ..api.controller.controller_pb2 import StatusRequest, StatusUpdate, MetricsRequest, MetricsUpdate, StartResponse
@@ -14,9 +16,9 @@ from ..utils.time import get_timestamp
 
 class ControllerServicer(controller_pb2_grpc.ControllerServicer):
 
-    def __init__(self):
+    def __init__(self, config: WorkerConfig):
         super().__init__()
-        self._fn_mngr = FunctionManager()
+        self._fn_mngr = FunctionManager(db_address=config.db_address, update_buffer_size=config.update_buffer_size)
 
     def Start(self, request: FunctionID, context: grpc.ServicerContext):
         logger.debug(f"Got Start call for function {request.id}")
