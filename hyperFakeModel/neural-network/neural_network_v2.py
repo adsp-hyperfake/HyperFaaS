@@ -9,6 +9,8 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from torch.utils.data import Dataset, DataLoader
+import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 ###########
 ### WIP ###
@@ -211,7 +213,7 @@ def train_model(
     )
     print("-" * 60)
 
-    for epoch in range(num_epochs):
+    for epoch in tqdm(range(num_epochs), desc="Training Epochs", ncols=100):
         train_loss = train_epoch(model, train_data_loader, criterion, optimizer)
 
         # Evaluate on validation set
@@ -226,7 +228,7 @@ def train_model(
 
         # Print progress every 10 epochs
         if (epoch + 1) % 10 == 0:
-            print(
+            tqdm.write(
                 f"Epoch [{epoch + 1:3d}/{num_epochs}] | "
                 f"Train Loss: {train_loss:.6f} | "
                 f"Val Loss: {val_loss:.6f} | "
@@ -319,12 +321,26 @@ def predict(model, scaler_X, scaler_y, input_data):
 
     return y_pred
 
+def plot_loss_curves(train_losses, val_losses):
+    epochs = range(1, len(train_losses) + 1)
+    plt.figure(figsize=(8, 5))
+    plt.plot(epochs, train_losses, label="Train Loss")
+    plt.plot(epochs, val_losses, label="Validation Loss")
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.title("Loss curves")
+    plt.legend()
+    plt.grid(True)
+    plt.show(block=False)
+    
+    plt.pause(0.01)
+
 def main(table_name, func_tag, target_path, db_path=None):
     """Main training pipeline."""
     torch.manual_seed(42)
     np.random.seed(42)
 
-    print(f"Using device: {DEVICE}")
+    print(f"Starting training pipeline for {func_tag} using device {DEVICE}.")
 
     # Load and preprocess data to tensors
     if db_path is None:
@@ -377,7 +393,7 @@ def main(table_name, func_tag, target_path, db_path=None):
         optimizer, mode="min", factor=0.1, patience=10
     )
     # Train the model
-    train_model(
+    train_losses, val_losses = train_model(
         model,
         train_data_loader,
         val_data_loader,
@@ -387,6 +403,9 @@ def main(table_name, func_tag, target_path, db_path=None):
         num_epochs=100,
         patience=20,
     )
+    
+    # Plot loss curves
+    plot_loss_curves(train_losses, val_losses)
 
     # Evaluate on test set
     test_loss, test_predictions, test_targets = evaluate_model(
