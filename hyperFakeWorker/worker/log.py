@@ -1,7 +1,9 @@
 import logging
 
 
-def set_log_level(log_level: str, log_file: str | None):
+def setup_logger(log_level: str, log_file: str | None):
+    global logger
+    
     level = logging.INFO
     match log_level.lower():
         case "debug":
@@ -22,6 +24,6 @@ def set_log_level(log_level: str, log_file: str | None):
     if log_file:
         kwargs["filename"] = log_file
 
-    logger = logging.getLogger(None)
-    logger.setLevel(level)    
-    
+    logging.basicConfig(**kwargs)
+    logger = logging.getLogger()
+    logger.setLevel(level)
