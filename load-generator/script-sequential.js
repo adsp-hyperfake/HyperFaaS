@@ -186,14 +186,14 @@ export function setup() {
   console.log("bfs", data[1].metadata.bfsFunctionId)
   console.log("echo", data[1].metadata.echoFunctionId)
   console.log("thumbnailer", data[1].metadata.thumbnailerFunctionId)
-  //const imageDataB64 = encoding.b64encode(http.get("https://picsum.photos/200/300").body);
+  const imageDataB64 = encoding.b64encode(http.get("https://picsum.photos/200/300").body);
   return {
     timeout: data[0].functionTimeoutSeconds,
     address: data[0].address,
     bfs: data[1].metadata.bfsFunctionId,
     echo: data[1].metadata.echoFunctionId,
     thumbnailer: data[1].metadata.thumbnailerFunctionId,
-    //imageDataB64: imageDataB64,
+    imageDataB64: imageDataB64,
     runId: data[0].runId
   };
 }
