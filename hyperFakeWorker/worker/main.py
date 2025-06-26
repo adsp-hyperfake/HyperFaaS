@@ -21,8 +21,8 @@ add_proto_definitions()
 @click.option('--log-format', default='text', help='Log format (json or text)')
 @click.option('--log-file', default=None, help='Log file path (defaults to stdout)')
 @click.option('--containerized', is_flag=True, help='Use socket to connect to Docker.')
-@click.option('--update-buffer-size', default=10000, type=int, help='Update buffer size.')
 @click.option("-m", "--model", "model", multiple=True, default=[], type=click.Path(resolve_path=True, path_type=Path, dir_okay=False, exists=True))
+@click.option('--update-buffer-size', default=None, type=int, help='Update buffer size.')  
 @click.pass_context
 def main(ctx, address, database_type, runtime, timeout, auto_remove, log_level, log_format, log_file, containerized, update_buffer_size, model):
     setup_logger(log_level, log_file)
@@ -30,6 +30,10 @@ def main(ctx, address, database_type, runtime, timeout, auto_remove, log_level, 
     db_address = "localhost:8999"
     if containerized:
         db_address = "database:8999/"
+
+    if update_buffer_size is None:
+        # If maxsize is <= 0, the queue size is infinite.
+        update_buffer_size = -1
 
     # Pass context to other commands
     ctx.obj = WorkerConfig(
