@@ -3,17 +3,18 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import json
 import os
+
 IMAGE_PALETTE = {
     "hyperfaas-bfs-json:latest": "blue",
     "hyperfaas-echo:latest": "red",
     "hyperfaas-thumbnailer-json:latest": "green",
 }
 class Plotter:
-    def __init__(self,show: bool = True, save_path = None):
+    def __init__(self, show: bool = True, save_path=None, prefix: str = None):
         self.show = show
         self.save_path = save_path
-        if self.save_path:
-             self.save = True
+        self.save = bool(self.save_path)
+        self.prefix = prefix + "_" if prefix else ""
 
     def plot_throughput_leaf_node(self, df: pd.DataFrame):
         """Plot the number of requests that completed processing per second at the leaf node level.
@@ -49,10 +50,11 @@ class Plotter:
         
         plot_data['total'] = plot_data['successful'] + plot_data['timeout'] + plot_data['error']
         
-        total_successful = df['grpc_req_duration'].notna().sum()
+        total_sent = df['grpc_req_duration'].notna().sum()
         total_timeouts = df['timeout'].notna().sum()
         total_errors = df['error'].notna().sum()
         total_requests = len(df) 
+        total_successful = total_sent - total_timeouts - total_errors
         if total_requests > 0:
             print(f"Success rate: {total_successful / total_requests * 100:.1f}%")
             print(f"Timeout rate: {total_timeouts / total_requests * 100:.1f}%")
@@ -70,8 +72,8 @@ class Plotter:
                         plot_data['total'],
                         label='Error', color='red', alpha=0.7)
         
-        ax1.plot(plot_data['time'], plot_data['total'], 
-                color='black', linestyle='-', linewidth=2, label='Total Requests')
+        """ ax1.plot(plot_data['time'], plot_data['total'], 
+                color='black', linestyle='-', linewidth=2, label='Total Requests') """
         
         ax1.set_title('Leaf Node Throughput: Successful Requests, Timeouts, and Errors Over Time', 
                     fontsize=14, fontweight='bold')
@@ -92,7 +94,7 @@ class Plotter:
         if self.show:
             plt.show()
         if self.save:
-            plt.savefig(os.path.join(self.save_path, "throughput_leaf_node.png"))
+            plt.savefig(os.path.join(self.save_path, f"{self.prefix}throughput_leaf_node.png"))
         plt.close()
 
     def plot_decomposed_latency(self, df: pd.DataFrame):
@@ -127,7 +129,7 @@ class Plotter:
             p.show()
         if self.save:
             os.makedirs(self.save_path, exist_ok=True)
-            p.save(os.path.join(self.save_path, "decomposed_latency.png"))
+            p.save(os.path.join(self.save_path, f"{self.prefix}decomposed_latency.png"))
         plt.close()
 
     def plot_expected_rps(self, df: pd.DataFrame, scenarios_path: str = None):
@@ -165,7 +167,7 @@ class Plotter:
         if self.show:
             plt.show()
         if self.save:
-            plt.savefig(os.path.join(self.save_path, "expected_rps.png"))
+            plt.savefig(os.path.join(self.save_path, f"{self.prefix}expected_rps.png"))
         plt.close()
         
         # Print summary statistics
@@ -174,3 +176,5 @@ class Plotter:
         summary.columns = ['avg_rps', 'peak_rps', 'total_requests']
         print(summary)
         print(f"\nTotal expected requests across all functions: {df['expected_rps'].sum():.0f}")
+    
+    

@@ -39,7 +39,6 @@ def create_tables(conn):
         -- Data metrics
         data_sent REAL,
         data_received REAL,
-        iteration_duration REAL,
         function_parameters TEXT,
         
         -- Other metadata
@@ -153,7 +152,7 @@ def import_csv_to_sqlite(csv_file='test_results.csv', db_file='metrics.db', json
                 continue
                 
             # Skip dropped iterations
-            if row['metric_name'] == 'dropped_iterations' or row['metric_name'] == 'iteration_duration':
+            if row['metric_name'] == 'dropped_iterations' or row['metric_name'] == 'iteration_duration' or row['metric_name'] == 'iterations':
                 continue
             
             # Extract request identifier
@@ -203,7 +202,7 @@ def import_csv_to_sqlite(csv_file='test_results.csv', db_file='metrics.db', json
             requests[request_key]['group_name'] = row['group']
             requests[request_key]['extra_tags'] = row['extra_tags']
             
-            # Store callqueuedtimestamp, gotresponsetimestamp, data_sent, data_received, iteration_duration
+            # Store callqueuedtimestamp, gotresponsetimestamp, data_sent, data_received
             if row['metric_name'] == 'callqueuedtimestamp':
                 requests[request_key]['callqueuedtimestamp'] = row['metric_value']
             elif row['metric_name'] == 'gotresponsetimestamp':
@@ -212,8 +211,6 @@ def import_csv_to_sqlite(csv_file='test_results.csv', db_file='metrics.db', json
                 requests[request_key]['data_sent'] = row['metric_value']
             elif row['metric_name'] == 'data_received':
                 requests[request_key]['data_received'] = row['metric_value']
-            elif row['metric_name'] == 'iteration_duration':
-                requests[request_key]['iteration_duration'] = row['metric_value']
             elif row['metric_name'] == 'grpc_req_duration':
                 requests[request_key]['grpc_req_duration'] = row['metric_value']
             elif row['metric_name'] == 'leafgotrequesttimestamp':
@@ -228,15 +225,22 @@ def import_csv_to_sqlite(csv_file='test_results.csv', db_file='metrics.db', json
                 requests[request_key]['error'] = row['metric_value']
     # insert collected requests into the database
     for request_key, data in requests.items():
-            
+        # skip requests that have no grpc_req_duration, error, or timeout
+        # I don't really understand why k6 logs this in this case. I think its related to the TCP connection issue.
+        if (
+            data.get('grpc_req_duration') is None and
+            data.get('timeout') is None and
+            data.get('error') is None
+        ):
+            continue
         cursor.execute('''
         INSERT INTO metrics (
             timestamp, scenario, service, image_tag, instance_id, request_id,
             grpc_req_duration, callqueuedtimestamp, gotresponsetimestamp, functionprocessingtime,
             leafgotrequesttimestamp, leafscheduledcalltimestamp,
-            data_sent, data_received, iteration_duration, function_parameters,
+            data_sent, data_received, function_parameters,
             proto, subproto, group_name, extra_tags, timeout, error
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             data.get('timestamp'),
             data.get('scenario'),
@@ -252,7 +256,6 @@ def import_csv_to_sqlite(csv_file='test_results.csv', db_file='metrics.db', json
             data.get('leafscheduledcalltimestamp'),
             data.get('data_sent'),
             data.get('data_received'),
-            data.get('iteration_duration'),
             data.get('function_parameters'),
             data.get('proto'),
             data.get('subproto'),

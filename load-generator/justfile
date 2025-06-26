@@ -14,13 +14,9 @@ register-functions address="localhost:50050":
 	@echo "Functions registered and IDs saved to function_ids.json"
 
 # Run multiple short sequential workloads to avoid gRPC connection buildup
-run-sequential total_runs="10" run_duration="2m" seed="12345" address="localhost:50050":
+run-sequential total_runs="10" run_duration="2m" address="localhost:50050":
 	#!/bin/bash
 	set -e
-	echo "{{run_duration}}"
-	echo "{{total_runs}}"
-	echo "{{seed}}"
-	echo "{{address}}"
 	total_runs=$(echo "{{total_runs}}")
 	run_duration=$(echo "{{run_duration}}")
 	echo "Running $total_runs sequential workloads of $run_duration each"
@@ -38,18 +34,15 @@ run-sequential total_runs="10" run_duration="2m" seed="12345" address="localhost
 	BFS_FUNCTION_ID=$(jq -r '.functionIds.bfs' function_ids.json)
 	ECHO_FUNCTION_ID=$(jq -r '.functionIds.echo' function_ids.json)
 	THUMBNAILER_FUNCTION_ID=$(jq -r '.functionIds.thumbnailer' function_ids.json)
-	echo "BFS_FUNCTION_ID=$BFS_FUNCTION_ID"
-	echo "ECHO_FUNCTION_ID=$ECHO_FUNCTION_ID"
-	echo "THUMBNAILER_FUNCTION_ID=$THUMBNAILER_FUNCTION_ID"
 	
 	# Run sequential workloads
 	for ((i=1; i<=total_runs; i++)); do
 		echo "Running workload $i/$total_runs..."
-		
+		seed=$(shuf -i 1-1000000 -n 1)
 		k6 run \
 		--quiet \
 		--out csv=test_results_run_${i}.csv \
-		-e WORKLOAD_SEED={{seed}} \
+		-e WORKLOAD_SEED=${seed} \
 		-e PERSIST_GENERATION=true \
 		-e TOTAL_TEST_DURATION=${run_duration} \
 		-e FUNCTION_TIMEOUT_SECONDS=30 \
@@ -116,6 +109,22 @@ export-sequential:
 	done
 	
 	echo "Sequential export completed!"
+
+process-sequential:
+	cd ../benchmarks && uv run process.py --db-path metrics.db --active-calls-window-size 100
+
+plot-sequential:
+	cd ../benchmarks && uv run main.py --plot --db-path metrics.db --plot-save-path ./plots/
+
+scenarios-sequential:
+	#!/bin/bash
+	for file in generated_scenarios_run_*.json; do
+		run_num=$(echo "$file" | sed 's/generated_scenarios_run_\([0-9]*\)\.json/\1/')
+		short_date=$(date +%Y-%m-%d)
+		cd ../benchmarks && uv run main.py --scenarios-path ../load-generator/$file --plot-save-path ./plots/ --prefix $short_date-$run_num
+	done
+
+
 
 # run a seeded load generation with parameters (original single run)
 run time="2m" seed="12345" address="localhost:50050":
