@@ -139,6 +139,7 @@ metrics-verify:
     sqlite3 benchmarks/metrics.db ".headers on" "select count(distinct(worker_cpu_usage)) from training_data;"
     sqlite3 benchmarks/metrics.db ".headers on" "select count(distinct(worker_ram_usage)) from training_data;"
     sqlite3 benchmarks/metrics.db ".headers on" "select count(case when function_cpu_usage = 0.0 then 1 end) as zero_count, count(case when function_cpu_usage != 0.0 then 1 end) as non_zero_count from training_data;"
+    sqlite3 benchmarks/metrics.db ".headers on" "select scenario, count() from metrics where grpc_req_duration is null and error is null and timeout is null group by scenario;"
 
 clean-metrics:
     rm ./benchmarks/metrics.db 2> /dev/null

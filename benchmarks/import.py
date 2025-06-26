@@ -153,7 +153,7 @@ def import_csv_to_sqlite(csv_file='test_results.csv', db_file='metrics.db', json
                 continue
                 
             # Skip dropped iterations
-            if row['metric_name'] == 'dropped_iterations':
+            if row['metric_name'] == 'dropped_iterations' or row['metric_name'] == 'iteration_duration':
                 continue
             
             # Extract request identifier
