@@ -1,7 +1,9 @@
+from functools import partial
 import os
 import sqlite3
 import numpy as np
 import pandas as pd
+import requests
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -11,6 +13,7 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from torch.utils.data import Dataset, DataLoader
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+import optuna
 
 ###########
 ### WIP ###
@@ -85,6 +88,7 @@ class MultiOutputNetwork(nn.Module):
 
         # Output layer
         layers.append(nn.Linear(prev_dim, output_dim))
+        layers.append(nn.ReLU())
 
         self.model = nn.Sequential(*layers)
 
@@ -331,9 +335,66 @@ def plot_loss_curves(train_losses, val_losses):
     plt.title("Loss curves")
     plt.legend()
     plt.grid(True)
-    plt.show(block=False)
+    plt.show()
+    #plt.show(block=False)
     
     plt.pause(0.01)
+
+def objective(trial, table_name, func_tag, target_path, db_path=None):
+    """
+    Optuna objective function for hyperparameter optimization.
+    This function defines hyperparameters to be optimized and trains the model multiple times, finding a good set of hyperparameters. 
+    """
+    
+    # Define hyperparameters and their search space
+    hidden_dims = [
+        trial.suggest_int("hidden_dim1", 16, 128),
+        trial.suggest_int("hidden_dim2", 8, 64),
+        trial.suggest_int("hidden_dim3", 4, 32)
+    ]
+    
+    dropouts = [
+        trial.suggest_float("dropout1", 0.0, 0.5),
+        trial.suggest_float("dropout2", 0.0, 0.5),
+        trial.suggest_float("dropout3", 0.0, 0.5)
+    ]
+    
+    lr = trial.suggest_float("lr", 1e-5, 1e-2, log=True)
+    weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-2, log=True)
+    batch_size = trial.suggest_categorical("batch_size", [16, 32, 64, 128])
+    patience = trial.suggest_int("patience", 5, 20)
+    
+    # Prepare data 
+    if db_path is None:
+        X, y = create_sample_data()
+    else:
+        X, y = load_data_from_db(db_path, table_name, func_tag)
+    
+    # Split data
+    X_temp, X_test, y_temp, y_test = train_test_split(X, y, test_size=0.35, random_state=42)
+    X_train, X_val, y_train, y_val = train_test_split(X_temp, y_temp, test_size=0.5, random_state=42)
+
+    # Create datasets and data loaders
+    train_dataset = CustomDataset(X_train, y_train, fit_scalers=True)
+    val_dataset = CustomDataset(X_val, y_val, scaler_X=train_dataset.scaler_X, scaler_y=train_dataset.scaler_y, fit_scalers=False)
+
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+
+    input_dim = X.shape[1]
+    output_dim = y.shape[1]
+    
+    # Define model, loss function, and optimizer
+    model = MultiOutputNetwork(input_dim, output_dim, hidden_dims, dropouts).to(DEVICE)
+    criterion = nn.MSELoss()
+    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.1, patience=5)
+
+    # Train the model
+    train_model(model, train_loader, val_loader, criterion, optimizer, scheduler, num_epochs=50, patience=patience)
+    val_loss, _, _ = evaluate_model(model, val_loader, criterion)
+
+    return val_loss
 
 def main(table_name, func_tag, target_path, db_path=None):
     """Main training pipeline."""
@@ -427,7 +488,7 @@ def main(table_name, func_tag, target_path, db_path=None):
     export_model_to_onnx(model, target_path)
 
 
-if __name__ == "__main__":
+def main_manual():
     func_tags = ["hyperfaas-bfs-json:latest", "hyperfaas-thumbnailer-json:latest", "hyperfaas-echo:latest"]
     short_names = ["bfs", "thumbnailer", "echo"]
     db_name = "metrics.db"
@@ -438,3 +499,34 @@ if __name__ == "__main__":
     for func_tag, short_name in zip(func_tags, short_names):
         target_path = curr_dir + "/" + short_name + ".onnx"
         main(table_name, func_tag, target_path, db_path=db_path)
+    
+def main_optuna():
+    #func_tags = ["hyperfaas-bfs-json:latest", "hyperfaas-thumbnailer-json:latest", "hyperfaas-echo:latest"]
+    func_tags = ["hyperfaas-thumbnailer-json:latest"]
+    #short_names = ["bfs", "thumbnailer", "echo"]
+    short_names = ["thumbnailer"]
+    db_name = "1h_best_run.db"
+    curr_dir = os.path.dirname(os.path.abspath(__file__))
+    db_path = curr_dir + "/../../benchmarks/" + db_name
+    table_name = "training_data"
+
+    for func_tag, short_name in zip(func_tags, short_names):
+        target_path = curr_dir + "/" + short_name + ".onnx"
+        
+        wrapped_objective = partial(objective, table_name=table_name, func_tag=func_tag, target_path=target_path, db_path=db_path)
+        
+        study = optuna.create_study(direction="minimize")
+        study.optimize(wrapped_objective, n_trials=20)
+    
+        print("Beste Parameter wurden gefunden:")
+        for key, value in study.best_params.items():
+            print(f"{key}: {value}")
+    
+        # Send notification via ntfy
+        msg = f"Beste Parameter:\n" + "\n".join(f"{key}: {value}" for key, value in study.best_params.items())
+        requests.post("https://ntfy.sh/hyperfake", data=msg.encode(encoding='utf-8'))
+
+if __name__ == "__main__":
+    # main_manual()
+    
+    main_optuna()
