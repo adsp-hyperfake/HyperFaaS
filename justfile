@@ -151,7 +151,8 @@ run-full-pipeline time="1m" total_runs="3" address="localhost:50050":
     # run the load generation
     just load-generator/register-functions {{address}}
     just load-generator/run-sequential {{total_runs}} {{time}} {{address}}
-    # TODO: call pull metrics script
+    # call pull metrics script : this will fail unless you have it locally
+    # This script lives outside the repo - its infra specific
     ../pull_metrics.sh
     # process the metrics
     just load-generator/export-sequential
@@ -164,10 +165,10 @@ run-full-pipeline time="1m" total_runs="3" address="localhost:50050":
 
     # Move the experiment run to the training data folder
     timestamp=$(date +%Y-%m-%d_%H-%M-%S)
-    mkdir -p ~/training_data/$(timestamp)
-    mv ./benchmarks/metrics.db ~/training_data/$(timestamp)/metrics.db
-    mv ./load-generator/generated_scenarios_*.json ~/training_data/$(timestamp)/
-    mv ./benchmarks/plots ~/training_data/$(timestamp)/plots
+    mkdir -p ~/training_data/${timestamp}
+    mv ./benchmarks/metrics.db ~/training_data/${timestamp}/metrics.db
+    mv ./load-generator/generated_scenarios_*.json ~/training_data/${timestamp}/
+    mv ./benchmarks/plots ~/training_data/${timestamp}/plots
 
 clean-metrics:
     rm ./benchmarks/metrics.db 2> /dev/null
