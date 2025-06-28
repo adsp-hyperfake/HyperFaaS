@@ -147,6 +147,7 @@ metrics-verify:
 # Data pipeline
 ############################
 run-full-pipeline time="1m" total_runs="3" address="localhost:50050":
+    #!/bin/bash
     # run the load generation
     just load-generator/register-functions
     just load-generator/run-sequential {{total_runs}} {{time}} {{address}}
