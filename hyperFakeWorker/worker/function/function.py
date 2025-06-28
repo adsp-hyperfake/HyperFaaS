@@ -101,7 +101,7 @@ class Function():
 
 class FunctionManager():
 
-    def __init__(self):
+    def __init__(self, db_address: str, update_buffer_size: int):
         self.function_lock = threading.RLock()
         # instance_id : Function
         self.active_functions: dict[InstanceIdStr, Function] = {}
@@ -109,10 +109,12 @@ class FunctionManager():
         self.instances: dict[FunctionIdStr, set[Function]] = {}
         self.images: dict[FunctionIdStr, FunctionImage] = {}
 
-        self.kvs_client = KVStoreClient("127.0.0.1:8999")
+        self.kvs_client = KVStoreClient(db_address)
         
         self.status_lock = threading.RLock()
         self.status_queues: WeakSet[Queue] = WeakSet()
+        
+        self.update_buffer_size = update_buffer_size
 
     def get_image(self, function_id: FunctionIdStr):
         with self.function_lock:
@@ -197,7 +199,7 @@ class FunctionManager():
                 q.put(update)
             
     def get_status_updates(self):
-        updates_queue: Queue[StatusUpdate] = Queue()
+        updates_queue: Queue[StatusUpdate] = Queue(maxsize=self.update_buffer_size)
         with self.status_lock:
             self.status_queues.add(updates_queue)
         
