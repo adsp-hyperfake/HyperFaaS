@@ -71,82 +71,33 @@ def server(config: WorkerConfig):
 
 
 @main.command()
-@click.pass_context
-def client(ctx):
+def client():
+    
+    
+    from .log import logger
     import grpc
-
-    from .api.common.common_pb2 import CallRequest, CallResponse, FunctionID, InstanceID
-    from .api.controller.controller_pb2 import StatusRequest, StatusUpdate
     from .api.controller.controller_pb2_grpc import ControllerStub
+    from .api.controller.controller_pb2 import StateRequest, StateResponse
+    from .api.common.common_pb2 import FunctionID, InstanceID, CallRequest, CallResponse
     channel = grpc.insecure_channel("localhost:50051")
     stub = ControllerStub(channel)
 
-    logger = logging.getLogger()
-    logger.info("Testing grpc server with Status stream...")
+    logger.info("Testing grpc server...")
 
-    # Example: stream status updates for a node
-    status_stream = stub.Status(StatusRequest(nodeID="12345"))
-    for status_update in status_stream:
-        print(
-            f"Status update: instance_id={status_update.instance_id.id}, function_id={status_update.function_id.id}, event={status_update.event}, status={status_update.status}")
-
-
-@main.command()
-@click.pass_context
-def test_call(ctx):
-    import grpc
-    import httpx
-
-    from .api.common.common_pb2 import CallRequest, FunctionID, InstanceID
-    from .api.controller.controller_pb2_grpc import ControllerStub
-
-    logger = logging.getLogger()
-    config: WorkerConfig = ctx.obj
-
-    # Register the function in the key-value store first
-    function_id_str = "hyperfaas-hello:latest"
-    kv_url = config.db_address
-    if not kv_url.startswith("http://"):
-        kv_url = f"http://{kv_url}"
-    function_metadata = {
-        "image_tag": function_id_str,
-        "config": {
-            "mem_limit": 128,
-            "cpu_quota": 100000,
-            "cpu_period": 100000,
-            "timeout": 10,
-            "max_concurrency": 1
-        }
-    }
-    try:
-        response = httpx.post(kv_url, json=function_metadata)
-        response.raise_for_status()
-        data = response.json()
-        # Expecting the store to return a JSON with the function id, e.g. {"FunctionID": "..."}
-        real_function_id = data.get("function_id", function_id_str)
-        logger.info(
-            f"Registered function {real_function_id} in key-value store.")
-    except Exception as e:
-        logger.error(f"Failed to register function in key-value store: {e}")
-        real_function_id = function_id_str
-
-    # Connect to the worker
-    channel = grpc.insecure_channel("localhost:50051")
-    stub = ControllerStub(channel)
-
-    # Start a function instance
-    function_id = FunctionID(id=real_function_id)
-    start_response = stub.Start(function_id)
-    instance_id = start_response.instance_id.id
-
-    # Call the function
-    call_request = CallRequest(
-        function_id=function_id,
-        instance_id=InstanceID(id=instance_id),
-        data=b"hello"
-    )
-    response = stub.Call(call_request)
-    print("Function call response:", response)
+    state: StateResponse = stub.State(StateRequest(node_id="12345"))
+    for function in state.functions:
+        print(f"State of functions: {function.function_id}")
+        print(f"Checking {len(function.idle)} idle function instances:")
+        for func in function.idle:
+            print(f"Checking instance {func.instance_id}: {func}")
+            call_future = stub.Call(CallRequest(instance_id=InstanceID(id=func.instance_id), function_id=function.function_id))
+            print(call_future)
+        print(f"Checking {len(function.running)} running function instances:")
+        for func in function.running:
+            print(f"Checking instance {func.instance_id}: {func}")
+            call_future = stub.Call(CallRequest(instance_id=InstanceID(id=func.instance_id), function_id=function.function_id))
+            print(call_future)
+    
 
 
 if __name__ == "__main__":
