@@ -1,9 +1,5 @@
 import grpc from 'k6/net/grpc';
 import { check } from 'k6';
-import { bfsConfig } from './functions/bfs.js';
-import { echoConfig } from './functions/echo.js';  
-import { thumbnailerConfig } from './functions/thumbnailer.js';
-
 const client = new grpc.Client();
 client.load(['./config'], 'common.proto', 'leaf.proto');
 
@@ -21,7 +17,7 @@ export function setup() {
 
   // Create BFS function
   const bfsCreateResponse = client.invoke('leaf.Leaf/CreateFunction', {
-    image_tag: { tag: bfsConfig.BFS_IMAGE_TAG },
+    image_tag: { tag: "hyperfaas-bfs-json:latest" },
     config: {
       memory: 256 * 1024 * 1024, // 256MB
       cpu: {
@@ -47,7 +43,7 @@ export function setup() {
 
   // Create Echo function
   const echoCreateResponse = client.invoke('leaf.Leaf/CreateFunction', {
-    image_tag: { tag: echoConfig.ECHO_IMAGE_TAG },
+    image_tag: { tag: "hyperfaas-echo-json:latest" },
     config: {
       memory: 256 * 1024 * 1024, // 256MB
       cpu: {
@@ -73,7 +69,7 @@ export function setup() {
 
   // Create Thumbnailer function
   const thumbnailerCreateResponse = client.invoke('leaf.Leaf/CreateFunction', {
-    image_tag: { tag: thumbnailerConfig.THUMBNAILER_IMAGE_TAG },
+    image_tag: { tag: "hyperfaas-thumbnailer-json:latest" },
     config: {
       memory: 512 * 1024 * 1024, // 512MB
       cpu: {
