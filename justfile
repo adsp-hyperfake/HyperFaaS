@@ -124,7 +124,7 @@ load-test:
     go run ./tests/leaf/main.go
 
 metrics-analyse:
-    cd benchmarks && uv run main.py --db-path metrics.db --scenarios-path ../load-generator/generated_scenarios_run_1.json --plot-save-path ./plots/
+    cd benchmarks && uv run main.py --analyse --db-path metrics.db --scenarios-path ../load-generator/generated_scenarios_run_1.json --plot-save-path ./plots/
 
 metrics-plot:
     cd benchmarks && uv run plot.py--plot --prefix $(date +%Y-%m-%d) --plot-save-path ./plots/
