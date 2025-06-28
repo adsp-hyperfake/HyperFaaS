@@ -151,7 +151,7 @@ run-full-pipeline time="1m" total_runs="3" address="localhost:50050":
     just load-generator/register-functions
     just load-generator/run-sequential {{total_runs}} {{time}} {{address}}
     # TODO: call pull metrics script
-
+    ../pull_metrics.sh
     # process the metrics
     just load-generator/export-sequential
 
@@ -160,6 +160,13 @@ run-full-pipeline time="1m" total_runs="3" address="localhost:50050":
     just load-generator/scenarios-sequential
 
     just load-generator/plot-sequential
+
+    # Move the experiment run to the training data folder
+    timestamp=$(date +%Y-%m-%d_%H-%M-%S)
+    mkdir -p ~/training_data/{{timestamp}}
+    mv ./benchmarks/metrics.db ~/training_data/{{timestamp}}/metrics.db
+    mv ./load-generator/generated_scenarios_*.json ~/training_data/{{timestamp}}/
+    mv ./benchmarks/plots ~/training_data/{{timestamp}}/plots
 
 clean-metrics:
     rm ./benchmarks/metrics.db 2> /dev/null
