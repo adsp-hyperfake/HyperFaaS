@@ -88,7 +88,7 @@ class MultiOutputNetwork(nn.Module):
 
         # Output layer
         layers.append(nn.Linear(prev_dim, output_dim))
-        layers.append(nn.ReLU())
+        layers.append(nn.SoftPlus())
 
         self.model = nn.Sequential(*layers)
 
