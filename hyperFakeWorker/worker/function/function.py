@@ -42,7 +42,7 @@ class Function():
 
     @property
     def was_recently_active(self):
-        return self.is_active or self.time_since_last_work < 1.0
+        return self.is_active or self.time_since_last_work <= 1.0
 
     @property
     def is_active(self):
@@ -117,6 +117,8 @@ class Function():
             self.last_worked_at = int(datetime.datetime.now().timestamp())
             if timeout:
                 return self.timeout()
+            self.cpu = 0
+            self.ram = 0
             return random.randbytes(bytes), results.function_runtime
            
     def __eq__(self, value):
@@ -147,11 +149,13 @@ class FunctionManager():
 
     @property
     def total_cpu_usage(self) -> float:
-        return 1.0
+        with self.function_lock:
+            return sum([func.cpu for func in self.active_functions.values()], 0)
     
     @property
     def total_ram_usage(self) -> int:
-        return 1000
+        with self.function_lock:
+            return sum([func.ram for func in self.active_functions.values()], 0)
 
     def get_image(self, function_id: FunctionIdStr):
         with self.function_lock:

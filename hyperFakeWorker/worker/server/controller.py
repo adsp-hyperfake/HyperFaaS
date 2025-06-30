@@ -125,6 +125,6 @@ class ControllerServicer(controller_pb2_grpc.ControllerServicer):
     def Metrics(self, request: MetricsRequest, context: grpc.ServicerContext):
         logger.debug(f"Got Metrics request!")
         return MetricsUpdate(
-            used_ram_percent=1000.0,
-            cpu_percent_percpu=[1.0,1.0,0.3]
+            used_ram_percent=self._function_manager.total_ram_usage,
+            cpu_percent_percpu=[self._function_manager.total_cpu_usage]
         )

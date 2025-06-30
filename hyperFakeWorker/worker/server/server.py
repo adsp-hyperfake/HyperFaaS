@@ -23,6 +23,7 @@ def serve(models: list[Path]):
             time.sleep(6)
             logger.info(f"Active Functions: {controller_servicer._function_manager.num_recently_active_functions}")
             logger.info(f"Scheduled Functions: {controller_servicer._function_manager.num_functions}")
+            logger.info(f"Resource Consumption: CPU : {controller_servicer._function_manager.total_cpu_usage} | RAM: {controller_servicer._function_manager.total_ram_usage}")
     except KeyboardInterrupt:
         server.stop(6.0)
         server.wait_for_termination()
