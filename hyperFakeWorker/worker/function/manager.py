@@ -17,9 +17,9 @@ class FunctionManager():
     def __init__(self, db_address: str, update_buffer_size: int):
         self.function_lock = threading.RLock()
         # instance_id : Function
-        self.active_functions: WeakValueDictionary[InstanceIdStr, AbstractFunction] = WeakValueDictionary()
+        self.active_functions: dict[InstanceIdStr, AbstractFunction] = {}
         # function_id : set[Function]
-        self.instances: dict[FunctionIdStr, WeakSet[AbstractFunction]] = {}
+        self.instances: dict[FunctionIdStr, set[AbstractFunction]] = {}
         self.images: dict[FunctionIdStr, FunctionImage] = {}
 
         self.kvs_client = KVStoreClient(db_address)
@@ -90,7 +90,7 @@ class FunctionManager():
 
             # Add to set of all instances of an image
             if self.instances.get(function.function_id) is None:
-                self.instances[function.function_id] = WeakSet()
+                self.instances[function.function_id] = set()
             self.instances[function.function_id].add(function)
 
     def remove_function(self, instance_id: InstanceIdStr):
