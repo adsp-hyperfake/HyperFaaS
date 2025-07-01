@@ -10,7 +10,6 @@ from .log import setup_logger
 
 add_proto_definitions()
 
-
 @click.group()
 @click.option('--address', default='', help='Worker address.')
 @click.option('--database-type', default='http', help='Type of the database.')
@@ -61,7 +60,6 @@ def main(ctx, address, database_type, runtime, timeout, auto_remove, log_level, 
         models=model
     )
 
-
 @main.command()
 @click.pass_obj
 def server(config: WorkerConfig):
@@ -69,10 +67,8 @@ def server(config: WorkerConfig):
 
     serve(config)
 
-
 @main.command()
 def client():
-    
     
     from .log import logger
     import grpc
@@ -98,7 +94,5 @@ def client():
             call_future = stub.Call(CallRequest(instance_id=InstanceID(id=func.instance_id), function_id=function.function_id))
             print(call_future)
     
-
-
 if __name__ == "__main__":
     main()
