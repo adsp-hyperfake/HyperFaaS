@@ -19,7 +19,7 @@ class ControllerServicer(controller_pb2_grpc.ControllerServicer):
 
     def __init__(self, config: WorkerConfig):
         super().__init__()
-        self._fn_mngr = FunctionManager(models=config.models, db_address=config.db_address, update_buffer_size=config.update_buffer_size)
+        self._function_manager = FunctionManager(models=config.models, db_address=config.db_address, update_buffer_size=config.update_buffer_size)
 
     def Start(self, request: FunctionID, context: grpc.ServicerContext):
         logger.debug(f"Got Start call for function {request.id}")
