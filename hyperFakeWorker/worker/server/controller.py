@@ -1,5 +1,5 @@
 import grpc
-from traceback import print_exc
+from traceback import format_exc
 from time import sleep
 from pathlib import Path
 
@@ -88,7 +88,6 @@ class ControllerServicer(controller_pb2_grpc.ControllerServicer):
                     data=response,
                     instance_id=InstanceID(id=func.instance_id)
                 )
-                logger.debug(f"Returning response {response.__str__()}")
                 context.set_trailing_metadata(
                     (
                         ("gotResponseTimestamp".lower(), str(response_ts)),
@@ -96,13 +95,22 @@ class ControllerServicer(controller_pb2_grpc.ControllerServicer):
                         ("functionProcessingTime".lower(), str(runtime))
                     )
                 )
+                logger.error(f"Setting trailing metadata: gotResponseTimestamp={response_ts}, callQueuedTimestamp={queued_ts}, functionProcessingTime={runtime}")
+                logger.debug(f"Returning response {response.__str__()}")
                 
             except Exception as e:
-                print("Encountered error!")
-                print_exc()
+                logger.error("Encountered error!")
+                logger.error(format_exc())
                 response = CallResponse(
                     request_id=request.request_id,
                     error=Error(message="Encountered Unexpected error when executing function call!")
+                )
+                context.set_trailing_metadata(
+                    (
+                        ("gotResponseTimestamp".lower(), str(0)),
+                        ("callQueuedTimestamp".lower(), str(0)),
+                        ("functionProcessingTime".lower(), str(0))
+                    )
                 )
             finally:
                 return response
