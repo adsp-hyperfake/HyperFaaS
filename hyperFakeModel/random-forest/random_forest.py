@@ -73,8 +73,16 @@ def export_model_to_onnx(model, input_dim, target_path):
     dirpath = os.path.dirname(target_path)
     if dirpath:
         os.makedirs(dirpath, exist_ok=True)
+
     initial_types = [("input", FloatTensorType([None, input_dim]))]
-    onnx_model = convert_sklearn(model, initial_types=initial_types)
+
+    final_types = [("variable", FloatTensorType([None, len(OUTPUT_COLS)]))]
+
+    onnx_model = convert_sklearn(
+        model,
+        initial_types=initial_types,
+        final_types=final_types
+    )
     metadata = {
         "features": ",".join(INPUT_COLS),
         "targets": ",".join(OUTPUT_COLS),
