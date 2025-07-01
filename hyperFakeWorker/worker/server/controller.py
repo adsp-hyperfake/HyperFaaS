@@ -12,19 +12,22 @@ from ..api.controller.controller_pb2 import VirtualizationType, Event, Status
 
 from ..log import logger
 
-from ..function.function import FunctionManager, Function
+from ..function.manager import FunctionManager
+from ..function.model import ModelManager
+from ..function.function import Function
 from ..utils.time import get_timestamp
 
 class ControllerServicer(controller_pb2_grpc.ControllerServicer):
 
     def __init__(self, config: WorkerConfig):
         super().__init__()
-        self._function_manager = FunctionManager(models=config.models, db_address=config.db_address, update_buffer_size=config.update_buffer_size)
+        self._function_manager = FunctionManager(db_address=config.db_address, update_buffer_size=config.update_buffer_size)
+        self._model_manager = ModelManager(models=config.models)
 
     def Start(self, request: FunctionID, context: grpc.ServicerContext):
         logger.debug(f"Got Start call for function {request.id}")
         function_image = self._function_manager.get_image(request.id)
-        model_path = self._function_manager.find_model(request.id, function_image)
+        model_path = self._model_manager.find_model(request.id, function_image)
         new_function = Function.create_new(self._function_manager, request.id, function_image, model_path)
         with self._function_manager.function_lock:
             self._function_manager.add_function(new_function)
