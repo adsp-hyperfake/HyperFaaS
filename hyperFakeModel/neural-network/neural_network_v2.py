@@ -128,7 +128,7 @@ def create_sample_data(n_samples=10000):
     return X, y
 
 
-def load_data_from_db(db_path, table_nam, func_tag):
+def load_data_from_db(db_path, table_name, func_tag):
     """Load data from SQLite database and return features and targets as numpy arrays."""
     # Read data from database
     query = f"SELECT {', '.join(INPUT_COLS + OUTPUT_COLS)} FROM {table_name} WHERE function_image_tag = '{func_tag}'"
@@ -337,39 +337,39 @@ def plot_loss_curves(train_losses, val_losses):
     plt.grid(True)
     plt.show()
     #plt.show(block=False)
-    
+
     plt.pause(0.01)
 
 def objective(trial, table_name, func_tag, target_path, db_path=None):
     """
     Optuna objective function for hyperparameter optimization.
-    This function defines hyperparameters to be optimized and trains the model multiple times, finding a good set of hyperparameters. 
+    This function defines hyperparameters to be optimized and trains the model multiple times, finding a good set of hyperparameters.
     """
-    
+
     # Define hyperparameters and their search space
     hidden_dims = [
         trial.suggest_int("hidden_dim1", 16, 128),
         trial.suggest_int("hidden_dim2", 8, 64),
         trial.suggest_int("hidden_dim3", 4, 32)
     ]
-    
+
     dropouts = [
         trial.suggest_float("dropout1", 0.0, 0.5),
         trial.suggest_float("dropout2", 0.0, 0.5),
         trial.suggest_float("dropout3", 0.0, 0.5)
     ]
-    
+
     lr = trial.suggest_float("lr", 1e-5, 1e-2, log=True)
     weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-2, log=True)
     batch_size = trial.suggest_categorical("batch_size", [16, 32, 64, 128])
     patience = trial.suggest_int("patience", 5, 20)
-    
-    # Prepare data 
+
+    # Prepare data
     if db_path is None:
         X, y = create_sample_data()
     else:
         X, y = load_data_from_db(db_path, table_name, func_tag)
-    
+
     # Split data
     X_temp, X_test, y_temp, y_test = train_test_split(X, y, test_size=0.35, random_state=42)
     X_train, X_val, y_train, y_val = train_test_split(X_temp, y_temp, test_size=0.5, random_state=42)
@@ -383,7 +383,7 @@ def objective(trial, table_name, func_tag, target_path, db_path=None):
 
     input_dim = X.shape[1]
     output_dim = y.shape[1]
-    
+
     # Define model, loss function, and optimizer
     model = MultiOutputNetwork(input_dim, output_dim, hidden_dims, dropouts).to(DEVICE)
     criterion = nn.MSELoss()
@@ -464,7 +464,7 @@ def main(table_name, func_tag, target_path, db_path=None):
         num_epochs=100,
         patience=20,
     )
-    
+
     # Plot loss curves
     plot_loss_curves(train_losses, val_losses)
 
@@ -499,7 +499,7 @@ def main_manual():
     for func_tag, short_name in zip(func_tags, short_names):
         target_path = curr_dir + "/" + short_name + ".onnx"
         main(table_name, func_tag, target_path, db_path=db_path)
-    
+
 def main_optuna():
     #func_tags = ["hyperfaas-bfs-json:latest", "hyperfaas-thumbnailer-json:latest", "hyperfaas-echo:latest"]
     func_tags = ["hyperfaas-thumbnailer-json:latest"]
@@ -507,26 +507,26 @@ def main_optuna():
     short_names = ["thumbnailer"]
     db_name = "1h_best_run.db"
     curr_dir = os.path.dirname(os.path.abspath(__file__))
-    db_path = curr_dir + "/../../benchmarks/" + db_name
+    db_path = curr_dir + "/../../../dbs" + db_name
     table_name = "training_data"
 
     for func_tag, short_name in zip(func_tags, short_names):
         target_path = curr_dir + "/" + short_name + ".onnx"
-        
+
         wrapped_objective = partial(objective, table_name=table_name, func_tag=func_tag, target_path=target_path, db_path=db_path)
-        
+
         study = optuna.create_study(direction="minimize")
         study.optimize(wrapped_objective, n_trials=20)
-    
+
         print("Beste Parameter wurden gefunden:")
         for key, value in study.best_params.items():
             print(f"{key}: {value}")
-    
+
         # Send notification via ntfy
         msg = f"Beste Parameter:\n" + "\n".join(f"{key}: {value}" for key, value in study.best_params.items())
         requests.post("https://ntfy.sh/hyperfake", data=msg.encode(encoding='utf-8'))
 
 if __name__ == "__main__":
     # main_manual()
-    
+
     main_optuna()
