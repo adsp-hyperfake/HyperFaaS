@@ -18,7 +18,7 @@ check:
 
 run-local:
   @echo "Running hyperFake worker"
-  uv run python -m worker.main -m models/hyperfaas-bfs-json.onnx -m models/hyperfaas-echo.onnx -m models/hyperfaas-thumbnailer-json.onnx server 
+  uv run python -m worker.main -m models/hyperfaas-bfs-json.onnx -m models/hyperfaas-echo.onnx -m models/hyperfaas-thumbnailer-json.onnx -w 64 server 
 
 test:
   @echo "Running tests that require external components"

@@ -3,26 +3,21 @@ import threading
 from queue import Queue
 from weakref import WeakSet, WeakValueDictionary
 
-from . import FunctionIdStr, InstanceIdStr
-from ..api.controller.controller_pb2 import StatusUpdate, FunctionState, InstanceState
-from ..api.common.common_pb2 import FunctionID
-from ..log import logger
+from .. import FunctionIdStr, InstanceIdStr
+from ...api.controller.controller_pb2 import StatusUpdate, FunctionState, InstanceState
+from ...api.common.common_pb2 import FunctionID
+from ...log import logger
 
-from . import AbstractFunction
-from ..kvstore.client import KVStoreClient
-from .image import FunctionImage
+from .. import AbstractFunction
 
 class FunctionManager():
 
-    def __init__(self, db_address: str, update_buffer_size: int):
+    def __init__(self, update_buffer_size: int):
         self.function_lock = threading.RLock()
         # instance_id : Function
-        self.active_functions: dict[InstanceIdStr, AbstractFunction] = {}
+        self.instanceId_to_instance_map: dict[InstanceIdStr, AbstractFunction] = {}
         # function_id : set[Function]
-        self.instances: dict[FunctionIdStr, set[AbstractFunction]] = {}
-        self.images: dict[FunctionIdStr, FunctionImage] = {}
-
-        self.kvs_client = KVStoreClient(db_address)
+        self.functionId_to_instances_map: dict[FunctionIdStr, WeakSet[AbstractFunction]] = {}
         
         self.status_lock = threading.RLock()
         self.status_queues: WeakSet[Queue] = WeakSet()
@@ -32,86 +27,78 @@ class FunctionManager():
     @property
     def total_cpu_usage(self) -> float:
         with self.function_lock:
-            return sum([func.cpu for func in self.active_functions.values()], 0)
+            return sum([func.cpu for func in self.instanceId_to_instance_map.values()], 0)
     
     @property
     def total_ram_usage(self) -> int:
         with self.function_lock:
-            return sum([func.ram for func in self.active_functions.values()], 0)
-
-    def get_image(self, function_id: FunctionIdStr):
-        with self.function_lock:
-            if self.images.get(function_id) is None:
-                self.images[function_id] = self.kvs_client.get_image(function_id)
-            return self.images[function_id]
+            return sum([func.ram for func in self.instanceId_to_instance_map.values()], 0)
 
     def get_num_recently_active_functions(self, function_id: FunctionIdStr) -> int:
-        with self.function_lock:
-            return len(list(filter(lambda i: i.was_recently_active, self.instances.get(function_id))))
+        return len([e for e in self.functionId_to_instances_map.get(function_id) if e.was_recently_active])
 
     @property
     def num_recently_active_functions(self) -> dict[FunctionIdStr, int]:
         with self.function_lock:
             active_funcs = {}
-            for key, value in self.instances.items():
+            for key, value in self.functionId_to_instances_map.items():
                 active = list(filter(lambda i: i.was_recently_active, value))
                 active_funcs[key] = len(active)
             return active_funcs
 
     def get_num_active_functions(self, function_id: FunctionIdStr) -> int:
-        with self.function_lock:
-            return len(list(filter(lambda i: i.is_active, self.instances.get(function_id))))
+        return len([e for e in self.functionId_to_instances_map.get(function_id) if e.is_active])
 
     @property
     def num_active_functions(self) -> dict[FunctionIdStr, int]:
         with self.function_lock:
             active_funcs = {}
-            for key, value in self.instances.items():
+            for key, value in self.functionId_to_instances_map.items():
                 active = list(filter(lambda i: i.is_active, value))
                 active_funcs[key] = len(active)
             return active_funcs
     
     def get_num_functions(self, function_id: FunctionIdStr) -> int:
         with self.function_lock:
-            return len(self.instances.get(function_id))
+            return len(self.functionId_to_instances_map.get(function_id))
 
     @property
     def num_functions(self) -> dict[FunctionIdStr, int]:
         with self.function_lock:
             active_funcs = {}
-            for key, value in self.instances.items():
+            for key, value in self.functionId_to_instances_map.items():
                 active_funcs[key] = len(value)
             return active_funcs
 
     def add_function(self, function: AbstractFunction):
         with self.function_lock:
             # Add to function instance map
-            self.active_functions[function.instance_id] = function
+            self.instanceId_to_instance_map[function.instance_id] = function
 
             # Add to set of all instances of an image
-            if self.instances.get(function.function_id) is None:
-                self.instances[function.function_id] = set()
-            self.instances[function.function_id].add(function)
+            if self.functionId_to_instances_map.get(function.function_id) is None:
+                self.functionId_to_instances_map[function.function_id] = WeakSet()
+            self.functionId_to_instances_map[function.function_id].add(function)
 
     def remove_function(self, instance_id: InstanceIdStr):
         with self.function_lock:
-            if self.active_functions.get(instance_id) is None:
+            if self.instanceId_to_instance_map.get(instance_id) is None:
                 return
-            function = self.active_functions[instance_id]
-            self.instances[function.function_id].remove(function)
-            return self.active_functions.pop(instance_id)
+            function = self.instanceId_to_instance_map[instance_id]
+            self.functionId_to_instances_map[function.function_id].remove(function)
+            return self.instanceId_to_instance_map.pop(instance_id)
 
     def get_function(self, instance_id: InstanceIdStr):
         with self.function_lock:
             try:
-                return self.active_functions[instance_id]
+                return self.instanceId_to_instance_map[instance_id]
             except KeyError as e:
-                logger.critical(f"Failed to find instance_id {instance_id} in:\n{self.active_functions.keys()}")
+                logger.critical(f"Failed to find instance_id {instance_id} in:\n{self.instanceId_to_instance_map.keys()}")
                 raise e
             
     def choose_function(self, function_id: FunctionIdStr):
         with self.function_lock:
-            available_functions = [func for func in self.instances[function_id] if not func.is_active]
+            available_functions = [func for func in self.functionId_to_instances_map[function_id] if not func.is_active]
             if len(available_functions) > 0:
                 return available_functions[0]
             return None
@@ -141,8 +128,8 @@ class FunctionManager():
     def get_state(self) -> list[FunctionState]:
         with self.function_lock:
             state = []
-            for function_id in self.instances.keys():
-                functions = self.instances[function_id]
+            for function_id in self.functionId_to_instances_map.keys():
+                functions = self.functionId_to_instances_map[function_id]
                 running = []
                 idle = []
                 for func in functions:

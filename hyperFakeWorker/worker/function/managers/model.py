@@ -1,8 +1,8 @@
 from pathlib import Path
 
-from .image import FunctionImage
+from ..image import FunctionImage
 
-from . import FunctionIdStr
+from .. import FunctionIdStr
 
 class ModelManager():
 
