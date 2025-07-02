@@ -6,6 +6,8 @@ class WorkerConfig:
     address: str
     database_type: str
     runtime: str
+    max_workers: int
+    max_rpcs: int
     timeout: int
     auto_remove: bool
     log_level: str
