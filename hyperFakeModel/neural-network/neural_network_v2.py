@@ -507,7 +507,7 @@ def main_optuna():
     short_names = ["thumbnailer"]
     db_name = "1h_best_run.db"
     curr_dir = os.path.dirname(os.path.abspath(__file__))
-    db_path = curr_dir + "/../../../dbs" + db_name
+    db_path = curr_dir + "/../../../dbs/" + db_name
     table_name = "training_data"
 
     for func_tag, short_name in zip(func_tags, short_names):
