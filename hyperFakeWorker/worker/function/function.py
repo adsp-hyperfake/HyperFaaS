@@ -6,7 +6,7 @@ import threading
 import time
 
 from . import AbstractFunction
-from .manager import FunctionManager
+from .managers.function import FunctionManager
 from .names import adjectives, names
 from ..api.controller.controller_pb2 import StatusUpdate, Event, Status
 from ..api.common.common_pb2 import InstanceID, FunctionID

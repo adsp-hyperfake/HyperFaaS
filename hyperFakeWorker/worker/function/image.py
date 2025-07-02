@@ -1,4 +1,3 @@
-
 class FunctionImage():
 
     def __init__(self, image: str, tag: str):
@@ -17,3 +16,4 @@ class FunctionImage():
         
     def __str__(self):
         return f"{self.image}:{self.tag}"
+    

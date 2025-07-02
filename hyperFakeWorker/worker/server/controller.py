@@ -12,8 +12,9 @@ from ..api.controller.controller_pb2 import VirtualizationType, Event, Status
 
 from ..log import logger
 
-from ..function.manager import FunctionManager
-from ..function.model import ModelManager
+from ..function.managers.function import FunctionManager
+from ..function.managers.model import ModelManager
+from ..function.managers.image import ImageManager
 from ..function.function import Function
 from ..utils.time import get_timestamp
 
@@ -21,12 +22,13 @@ class ControllerServicer(controller_pb2_grpc.ControllerServicer):
 
     def __init__(self, config: WorkerConfig):
         super().__init__()
-        self._function_manager = FunctionManager(db_address=config.db_address, update_buffer_size=config.update_buffer_size)
+        self._function_manager = FunctionManager(update_buffer_size=config.update_buffer_size)
+        self._image_manager = ImageManager(db_address=config.db_address)
         self._model_manager = ModelManager(models=config.models)
 
     def Start(self, request: FunctionID, context: grpc.ServicerContext):
         logger.debug(f"Got Start call for function {request.id}")
-        function_image = self._function_manager.get_image(request.id)
+        function_image = self._image_manager.get_image(request.id)
         model_path = self._model_manager.find_model(request.id, function_image)
         new_function = Function.create_new(self._function_manager, request.id, function_image, model_path)
         with self._function_manager.function_lock:
@@ -51,6 +53,7 @@ class ControllerServicer(controller_pb2_grpc.ControllerServicer):
                     request_id=request.request_id,
                     error=Error(message="Unable to schedule function call!")
                 )
+                logger.error(f"Failed to schedule call request for function {request.function_id.id}")
                 return response
             func = self._function_manager.choose_function(request.function_id.id)
             tries += 1
@@ -95,7 +98,6 @@ class ControllerServicer(controller_pb2_grpc.ControllerServicer):
                         ("functionProcessingTime".lower(), str(runtime))
                     )
                 )
-                logger.error(f"Setting trailing metadata: gotResponseTimestamp={response_ts}, callQueuedTimestamp={queued_ts}, functionProcessingTime={runtime}")
                 logger.debug(f"Returning response {response.__str__()}")
                 
             except Exception as e:
