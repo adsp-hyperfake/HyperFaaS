@@ -3,8 +3,6 @@ import logging
 from pathlib import Path
 
 import click
-import grpc
-from numpy import isin
 
 from .api import add_proto_definitions
 from .config import WorkerConfig
@@ -172,7 +170,7 @@ def test_call_leaf(ctx):
     import grpc
     
     from .api.leaf.leaf_pb2_grpc import LeafStub
-    from .api.leaf.leaf_pb2 import CreateFunctionRequest, CreateFunctionResponse, ScheduleCallRequest, ScheduleCallResponse
+    from .api.leaf.leaf_pb2 import CreateFunctionRequest, ScheduleCallRequest
     from .api.common.common_pb2 import ImageTag, Config, CPUConfig
     
     logger = logging.getLogger()
