@@ -335,15 +335,44 @@ def plot_loss_curves(train_losses, val_losses):
     plt.title("Loss curves")
     plt.legend()
     plt.grid(True)
-    plt.show()
-    #plt.show(block=False)
-
+    #plt.show()
+    plt.show(block=False)
+    
     plt.pause(0.01)
+
+def split_data(X, y, test_size=0.35, val_size=0.5, seed=42):
+    X_temp, X_test, y_temp, y_test = train_test_split(X, y, test_size=test_size, random_state=seed)
+    X_train, X_val, y_train, y_val = train_test_split(X_temp, y_temp, test_size=val_size, random_state=seed)
+    return X_train, X_val, X_test, y_train, y_val, y_test
+
+def prepare_dataloaders(X_train, y_train, X_val, y_val, batch_size, X_test=None, y_test=None):
+    train_dataset = CustomDataset(X_train, y_train, fit_scalers=True)
+    val_dataset = CustomDataset(X_val, y_val, scaler_X=train_dataset.scaler_X, scaler_y=train_dataset.scaler_y, fit_scalers=False)
+    
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+    
+    test_loader = None
+    if X_test is not None and y_test is not None:
+        test_dataset = CustomDataset(X_test, y_test, scaler_X=train_dataset.scaler_X, scaler_y=train_dataset.scaler_y, fit_scalers=False)
+        test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+    else:
+        test_dataset = None
+
+    return train_loader, val_loader, test_loader, train_dataset
+
+def initialize_model(input_dim, output_dim, hidden_dims, dropouts, lr, weight_decay, scheduler_patience):
+    model = MultiOutputNetwork(input_dim, output_dim, hidden_dims, dropouts).to(DEVICE)
+    criterion = nn.MSELoss()
+    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.1, patience=scheduler_patience)
+    return model, criterion, optimizer, scheduler
 
 def objective(trial, table_name, func_tag, target_path, db_path=None):
     """
     Optuna objective function for hyperparameter optimization.
-    This function defines hyperparameters to be optimized and trains the model multiple times, finding a good set of hyperparameters.
+    This function defines hyperparameters to be optimized and trains the model once and returns the validation loss.
+    It is supposed to be used with Optuna to find very good hyperparameters for the model. 
     """
 
     # Define hyperparameters and their search space
@@ -369,26 +398,18 @@ def objective(trial, table_name, func_tag, target_path, db_path=None):
         X, y = create_sample_data()
     else:
         X, y = load_data_from_db(db_path, table_name, func_tag)
-
-    # Split data
-    X_temp, X_test, y_temp, y_test = train_test_split(X, y, test_size=0.35, random_state=42)
-    X_train, X_val, y_train, y_val = train_test_split(X_temp, y_temp, test_size=0.5, random_state=42)
-
-    # Create datasets and data loaders
-    train_dataset = CustomDataset(X_train, y_train, fit_scalers=True)
-    val_dataset = CustomDataset(X_val, y_val, scaler_X=train_dataset.scaler_X, scaler_y=train_dataset.scaler_y, fit_scalers=False)
-
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
-
-    input_dim = X.shape[1]
-    output_dim = y.shape[1]
+    
+    # Split data and prepare dataloaders
+    X_train, X_val, _, y_train, y_val, _ = split_data(X, y)
+    train_loader, val_loader, _, _ = prepare_dataloaders(X_train, y_train, X_val, y_val, batch_size)
 
     # Define model, loss function, and optimizer
-    model = MultiOutputNetwork(input_dim, output_dim, hidden_dims, dropouts).to(DEVICE)
-    criterion = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.1, patience=5)
+    input_dim = X.shape[1]
+    output_dim = y.shape[1]
+    
+    model, criterion, optimizer, scheduler = initialize_model(
+        input_dim, output_dim, hidden_dims, dropouts, lr, weight_decay, scheduler_patience=5
+    )
 
     # Train the model
     train_model(model, train_loader, val_loader, criterion, optimizer, scheduler, num_epochs=50, patience=patience)
@@ -396,7 +417,12 @@ def objective(trial, table_name, func_tag, target_path, db_path=None):
 
     return val_loss
 
-def main(table_name, func_tag, target_path, db_path=None):
+def main(table_name,
+         func_tag,
+         target_path,
+         db_path=None,
+         hyperparams=None,
+    ):
     """Main training pipeline."""
     torch.manual_seed(42)
     np.random.seed(42)
@@ -408,75 +434,59 @@ def main(table_name, func_tag, target_path, db_path=None):
         X, y = create_sample_data()
     else:
         X, y = load_data_from_db(db_path, table_name, func_tag)
+    
     # Split data
-    X_temp, X_test, y_temp, y_test = train_test_split(
-        X, y, test_size=0.35, random_state=42
-    )
-    X_train, X_val, y_train, y_val = train_test_split(
-        X_temp, y_temp, test_size=0.5, random_state=42
-    )
+    X_train, X_val, X_test, y_train, y_val, y_test = split_data(X, y)
+    
+    # If hyperparameters are provided, use them; otherwise, set default values
+    if hyperparams is None:
+        hyperparams = {
+           "hidden_dims": [95, 47, 9],
+           "dropouts": [0.34, 0.018, 0.116],
+           "lr": 0.001,
+           "weight_decay": 1.05e-05,
+           "batch_size": 64,
+           "patience": 10
+        }
 
-    # Create datasets and data loaders
-    train_dataset = CustomDataset(X_train, y_train, fit_scalers=True)
-    val_dataset = CustomDataset(
-        X_val,
-        y_val,
-        scaler_X=train_dataset.scaler_X,
-        scaler_y=train_dataset.scaler_y,
-        fit_scalers=False,
+    train_loader, val_loader, test_loader, train_dataset = prepare_dataloaders(
+        X_train, y_train, X_val, y_val, hyperparams["batch_size"], X_test, y_test
     )
-    test_dataset = CustomDataset(
-        X_test,
-        y_test,
-        scaler_X=train_dataset.scaler_X,
-        scaler_y=train_dataset.scaler_y,
-        fit_scalers=False,
-    )
-
-    # Data loaders
-    batch_size = 32
-    train_data_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_data_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
-    test_data_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
     # Model configuration
     input_dim = X_train.shape[1]
     output_dim = y_train.shape[1]
-    hidden_dims = [32, 16, 8]
 
     # Create model, loss function, and optimizer
-    model = MultiOutputNetwork(input_dim, output_dim, hidden_dims).to(DEVICE)
-    criterion = nn.MSELoss()
-    # we can also try 1e-5 (simpler) or even 1e-3 (complex) for the weight decay
-    optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-4)
-    # https://docs.pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.ReduceLROnPlateau.html#torch.optim.lr_scheduler.ReduceLROnPlateau
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="min", factor=0.1, patience=10
+    model, criterion, optimizer, scheduler = initialize_model(
+        input_dim,
+        output_dim,
+        hyperparams["hidden_dims"],
+        hyperparams["dropouts"],
+        hyperparams["lr"],
+        hyperparams["weight_decay"],
+        scheduler_patience=10,
     )
+    
     # Train the model
     train_losses, val_losses = train_model(
         model,
-        train_data_loader,
-        val_data_loader,
+        train_loader,
+        val_loader,
         criterion,
         optimizer,
         scheduler,
         num_epochs=100,
-        patience=20,
+        patience=hyperparams["patience"]
     )
-
-    # Plot loss curves
-    plot_loss_curves(train_losses, val_losses)
-
+    
     # Evaluate on test set
-    test_loss, test_predictions, test_targets = evaluate_model(
-        model, test_data_loader, criterion
-    )
+    test_loss, test_predictions, test_targets = evaluate_model(model, test_loader, criterion)
     test_predictions_inverted = train_dataset.scaler_y.inverse_transform(test_predictions)
     test_targets_inverted = train_dataset.scaler_y.inverse_transform(test_targets)
-    test_metrics = calculate_metrics(
-        test_targets_inverted, test_predictions_inverted, OUTPUT_COLS
-    )
+    test_metrics = calculate_metrics(test_targets_inverted, test_predictions_inverted, OUTPUT_COLS)
+    
+    # Print test results
     print("=" * 30)
     print("Test Results:")
     print(f"Test Loss (normalized): {test_loss:.4f}")
@@ -484,11 +494,14 @@ def main(table_name, func_tag, target_path, db_path=None):
     print("=" * 30)
 
     # Export the model
-
     export_model_to_onnx(model, target_path)
+    
+    # Plot loss curves
+    plot_loss_curves(train_losses, val_losses)
 
 
 def main_manual():
+    """Main function to run the training pipeline manually."""
     func_tags = ["hyperfaas-bfs-json:latest", "hyperfaas-thumbnailer-json:latest", "hyperfaas-echo:latest"]
     short_names = ["bfs", "thumbnailer", "echo"]
     db_name = "metrics.db"
@@ -499,8 +512,9 @@ def main_manual():
     for func_tag, short_name in zip(func_tags, short_names):
         target_path = curr_dir + "/" + short_name + ".onnx"
         main(table_name, func_tag, target_path, db_path=db_path)
-
-def main_optuna():
+    
+def main_optuna(trials=20):
+    """Main function to run the training pipeline with Optuna hyperparameter optimization."""
     #func_tags = ["hyperfaas-bfs-json:latest", "hyperfaas-thumbnailer-json:latest", "hyperfaas-echo:latest"]
     func_tags = ["hyperfaas-thumbnailer-json:latest"]
     #short_names = ["bfs", "thumbnailer", "echo"]
@@ -512,21 +526,37 @@ def main_optuna():
 
     for func_tag, short_name in zip(func_tags, short_names):
         target_path = curr_dir + "/" + short_name + ".onnx"
-
+        
+        # Wrap the objective function with partial to pass additional arguments
         wrapped_objective = partial(objective, table_name=table_name, func_tag=func_tag, target_path=target_path, db_path=db_path)
-
+        
+        # Create an Optuna study and optimize
         study = optuna.create_study(direction="minimize")
-        study.optimize(wrapped_objective, n_trials=20)
-
+        study.optimize(wrapped_objective, n_trials=trials)
+    
         print("Beste Parameter wurden gefunden:")
         for key, value in study.best_params.items():
             print(f"{key}: {value}")
 
         # Send notification via ntfy
-        msg = f"Beste Parameter:\n" + "\n".join(f"{key}: {value}" for key, value in study.best_params.items())
-        requests.post("https://ntfy.sh/hyperfake", data=msg.encode(encoding='utf-8'))
+        requests.post("https://ntfy.sh/hyperfake", data="\n".join(f"{k}: {v}" for k, v in study.best_params.items()).encode("utf-8"))
+        
+        # Save the best hyperparameters
+        hyperparams = {
+            "hidden_dims": [study.best_params["hidden_dim1"], study.best_params["hidden_dim2"], study.best_params["hidden_dim3"]],
+            "dropouts": [study.best_params["dropout1"], study.best_params["dropout2"], study.best_params["dropout3"]],
+            "lr": study.best_params["lr"],
+            "weight_decay": study.best_params["weight_decay"],
+            "batch_size": study.best_params["batch_size"],
+            "patience": study.best_params["patience"]
+        }
+        
+        # Train the model with the best hyperparameters
+        main(table_name, func_tag, target_path, db_path=db_path, hyperparams=hyperparams)
+        
+        
 
 if __name__ == "__main__":
     # main_manual()
-
+    
     main_optuna()
