@@ -1,6 +1,6 @@
-from datetime import datetime
+from time import time_ns
 
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
 
 def get_timestamp() -> _timestamp_pb2.Timestamp:
-    return _timestamp_pb2.Timestamp(seconds=int(datetime.now().timestamp()))
+    return _timestamp_pb2.Timestamp(nanos=time_ns())
