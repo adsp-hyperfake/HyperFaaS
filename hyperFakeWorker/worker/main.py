@@ -77,7 +77,7 @@ def client():
     from .log import logger
     import grpc
     from .api.controller.controller_pb2_grpc import ControllerStub
-    from .api.controller.controller_pb2 import StateRequest, StateResponse
+    from .api.controller.controller_pb2 import InstanceStateRequest, InstanceState
     from .api.common.common_pb2 import FunctionID, InstanceID, CallRequest, CallResponse
     channel = grpc.insecure_channel("localhost:50051")
     stub = ControllerStub(channel)
