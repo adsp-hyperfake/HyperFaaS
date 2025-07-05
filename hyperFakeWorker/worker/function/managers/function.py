@@ -12,17 +12,12 @@ from .. import AbstractFunction
 
 class FunctionManager():
 
-    def __init__(self, update_buffer_size: int):
+    def __init__(self):
         self.function_lock = threading.RLock()
         # instance_id : Function
         self.instanceId_to_instance_map: dict[InstanceIdStr, AbstractFunction] = {}
         # function_id : set[Function]
         self.functionId_to_instances_map: dict[FunctionIdStr, WeakSet[AbstractFunction]] = {}
-        
-        self.status_lock = threading.RLock()
-        self.status_queues: WeakSet[Queue] = WeakSet()
-        
-        self.update_buffer_size = update_buffer_size
 
     @property
     def total_cpu_usage(self) -> float:
@@ -39,36 +34,21 @@ class FunctionManager():
 
     @property
     def num_recently_active_functions(self) -> dict[FunctionIdStr, int]:
-        with self.function_lock:
-            active_funcs = {}
-            for key, value in self.functionId_to_instances_map.items():
-                active = list(filter(lambda i: i.was_recently_active, value))
-                active_funcs[key] = len(active)
-            return active_funcs
+        return len([e for e in self.instanceId_to_instance_map.values() if e.was_recently_active])
 
     def get_num_active_functions(self, function_id: FunctionIdStr) -> int:
         return len([e for e in self.functionId_to_instances_map.get(function_id) if e.is_active])
 
     @property
-    def num_active_functions(self) -> dict[FunctionIdStr, int]:
-        with self.function_lock:
-            active_funcs = {}
-            for key, value in self.functionId_to_instances_map.items():
-                active = list(filter(lambda i: i.is_active, value))
-                active_funcs[key] = len(active)
-            return active_funcs
+    def num_active_functions(self) -> int:
+        return len([e for e in self.instanceId_to_instance_map.values() if e.is_active])
     
-    def get_num_functions(self, function_id: FunctionIdStr) -> int:
-        with self.function_lock:
-            return len(self.functionId_to_instances_map.get(function_id))
+    def get_num_function_instances(self, function_id: FunctionIdStr) -> int:
+        return len(self.functionId_to_instances_map.get(function_id))
 
     @property
-    def num_functions(self) -> dict[FunctionIdStr, int]:
-        with self.function_lock:
-            active_funcs = {}
-            for key, value in self.functionId_to_instances_map.items():
-                active_funcs[key] = len(value)
-            return active_funcs
+    def num_functions(self) -> int:
+        return len(self.instanceId_to_instance_map.values())
 
     def add_function(self, function: AbstractFunction):
         with self.function_lock:
@@ -89,42 +69,12 @@ class FunctionManager():
             return self.instanceId_to_instance_map.pop(instance_id)
 
     def get_function(self, instance_id: InstanceIdStr):
-        with self.function_lock:
-            try:
-                return self.instanceId_to_instance_map[instance_id]
-            except KeyError as e:
-                logger.critical(f"Failed to find instance_id {instance_id} in:\n{self.instanceId_to_instance_map.keys()}")
-                raise e
-            
-    def choose_function(self, function_id: FunctionIdStr):
-        with self.function_lock:
-            available_functions = [func for func in self.functionId_to_instances_map[function_id] if not func.is_active]
-            if len(available_functions) > 0:
-                return available_functions[0]
-            return None
-    
-    def send_status_update(self, update: StatusUpdate):
-        if not isinstance(update, StatusUpdate):
-            raise TypeError("The sent update must be an actual status update!")
-        with self.status_lock:
-            for q in self.status_queues:
-                q.put(update)
-            
-    def get_status_updates(self):
-        updates_queue: Queue[StatusUpdate] = Queue(maxsize=self.update_buffer_size)
-        with self.status_lock:
-            self.status_queues.add(updates_queue)
-        
         try:
-            while True:
-                update = updates_queue.get()
-                yield update
-                updates_queue.task_done()
-        finally:
-            with self.status_lock:
-                self.status_queues.remove(updates_queue)
-
-
+            return self.instanceId_to_instance_map[instance_id]
+        except KeyError as e:
+            logger.critical(f"Failed to find instance_id {instance_id} in:\n{self.instanceId_to_instance_map.keys()}")
+            raise e
+        
     def get_state(self) -> list[FunctionState]:
         with self.function_lock:
             state = []

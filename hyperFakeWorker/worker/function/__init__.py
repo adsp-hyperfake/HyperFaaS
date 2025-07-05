@@ -66,6 +66,14 @@ class AbstractFunction(ABC):
         pass
 
     @abstractmethod
+    def lock(self) -> bool:
+        pass
+    
+    @abstractmethod
+    def unlock(self):
+        pass
+
+    @abstractmethod
     def work(self, body_size: int, bytes: int) -> tuple[bytes, float]:
         pass
 

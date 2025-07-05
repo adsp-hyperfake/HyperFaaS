@@ -1,6 +1,5 @@
 import grpc
 import concurrent.futures as futures
-import multiprocessing
 import time
 
 from ..config import WorkerConfig
