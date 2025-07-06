@@ -123,12 +123,13 @@ def load_data_from_db(db_path, table_name, func_tag):
     """Load data from SQLite database and return features and targets as numpy arrays."""
     # Read data from database
     query = f"SELECT {', '.join(INPUT_COLS + OUTPUT_COLS)} FROM {table_name} WHERE function_image_tag = '{func_tag}'"
+    df = None
     try:
         with sqlite3.connect(db_path) as conn:
             df = pd.read_sql_query(query, conn)
     except Exception as e:
         print(f"Error loading data: {e}")
-    if df.empty:
+    if df is None or df.empty:
         raise EmptyDataError(f"DataFrame is empty: check the state of the db: {db_path}")
     # Split features and targets
     X = df[INPUT_COLS].values
@@ -354,16 +355,16 @@ def prepare_dataloaders(X_train, y_train, X_val, y_val, batch_size, X_test=None,
 
     return train_loader, val_loader, test_loader, train_dataset
 
-def initialize_model(input_dim, output_dim, hidden_dims, dropouts, lr, weight_decay, optimizer, scheduler_patience):
+def initialize_model(input_dim, output_dim, hidden_dims, dropouts, lr, weight_decay, optimizer_name, scheduler_patience):
     model = MLP(input_dim, output_dim, hidden_dims, dropouts).to(DEVICE)
     criterion = nn.MSELoss()
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.1, patience=scheduler_patience)
-    if optimizer == 'Adam':
+    if optimizer_name == 'Adam':
         optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
-    elif optimizer == 'SGD':
+    elif optimizer_name == 'SGD':
         optimizer = optim.SGD(model.parameters(), lr=lr)
     else:
         optimizer = optim.RMSprop(model.parameters(), lr=lr)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.1, patience=scheduler_patience)
     return model, criterion, optimizer, scheduler
 
 def objective(trial, table_name, func_tag, target_path, db_path=None):
