@@ -375,7 +375,7 @@ def objective(trial, table_name, func_tag, target_path, db_path=None):
     """
 
     # Define hyperparameters and their search space
-    n_layers = trial.suggest_int('n_layers', 2, 6)
+    n_layers = trial.suggest_int('n_layers', 1, 4)
     hidden_dims = []
     dropouts = []
     for i in range(n_layers):
