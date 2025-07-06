@@ -1,7 +1,7 @@
 from contextlib import contextmanager
 
 from . import FunctionIdStr
-from .managers.function import FunctionManager
+from ..managers.function import FunctionManager
 from .function import Function
 from time import sleep
 

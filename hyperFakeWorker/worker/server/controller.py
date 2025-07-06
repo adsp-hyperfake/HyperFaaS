@@ -14,10 +14,10 @@ from ..api.controller.controller_pb2 import VirtualizationType, Event, Status
 
 from ..log import logger
 
-from ..function.managers.function import FunctionManager
-from ..function.managers.model import ModelManager
-from ..function.managers.image import ImageManager
-from ..function.managers.status import StatusManager
+from ..managers.function import FunctionManager
+from ..managers.model import ModelManager
+from ..managers.image import ImageManager
+from ..managers.status import StatusManager
 from ..function.function import Function
 from ..function.scheduler import FunctionScheduler
 from ..utils.time import get_timestamp

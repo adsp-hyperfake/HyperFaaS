@@ -2,7 +2,7 @@ import threading
 from queue import Queue
 from weakref import WeakSet
 
-from ...api.controller.controller_pb2 import StatusUpdate
+from ..api.controller.controller_pb2 import StatusUpdate
 
 class StatusManager():
 

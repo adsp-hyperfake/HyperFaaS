@@ -1,14 +1,11 @@
-from pathlib import Path
 import threading
-from queue import Queue
-from weakref import WeakSet, WeakValueDictionary
+from weakref import WeakSet
 
-from .. import FunctionIdStr, InstanceIdStr
-from ...api.controller.controller_pb2 import StatusUpdate, FunctionState, InstanceState
-from ...api.common.common_pb2 import FunctionID
-from ...log import logger
-
-from .. import AbstractFunction
+from ..function import FunctionIdStr, InstanceIdStr
+from ..api.controller.controller_pb2 import StatusUpdate, FunctionState, InstanceState
+from ..api.common.common_pb2 import FunctionID
+from ..log import logger
+from ..function.abstract import AbstractFunction
 
 class FunctionManager():
 

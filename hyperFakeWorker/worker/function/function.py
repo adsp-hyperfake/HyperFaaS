@@ -5,9 +5,9 @@ from hashlib import sha256
 import threading
 import time
 
-from . import AbstractFunction
-from .managers.function import FunctionManager
-from .managers.status import StatusManager
+from .abstract import AbstractFunction
+from ..managers.function import FunctionManager
+from ..managers.status import StatusManager
 from .names import adjectives, names
 from ..api.controller.controller_pb2 import StatusUpdate, Event, Status
 from ..api.common.common_pb2 import InstanceID, FunctionID

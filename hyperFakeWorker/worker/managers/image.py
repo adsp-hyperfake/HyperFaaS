@@ -1,7 +1,7 @@
 import threading
-from .. import FunctionIdStr
-from ..image import FunctionImage
-from ...kvstore.client import KVStoreClient
+from ..function import FunctionIdStr
+from ..function.image import FunctionImage
+from ..kvstore.client import KVStoreClient
 
 
 class ImageManager():
