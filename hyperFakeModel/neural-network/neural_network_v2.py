@@ -383,18 +383,11 @@ def objective(trial, table_name, func_tag, target_path, db_path=None):
         hidden_dims.append(hidden_dim)
         dropouts.append(dropout)
 
+    optimizer_name = trial.suggest_categorical('optimizer', ['Adam', 'SGD', 'RMSprop'])
     lr = trial.suggest_float("lr", 1e-5, 1e-2, log=True)
     weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-2, log=True)
     batch_size = trial.suggest_categorical("batch_size", [16, 32, 64, 128])
     patience = trial.suggest_int("patience", 5, 20)
-
-    optimizer_name = trial.suggest_categorical('optimizer', ['Adam', 'SGD', 'RMSprop'])
-    if optimizer_name == 'Adam':
-        optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
-    elif optimizer_name == 'SGD':
-        optimizer = optim.SGD(model.parameters(), lr=lr)
-    else:
-        optimizer = optim.RMSprop(model.parameters(), lr=lr)
 
     # Prepare data
     if db_path is None:
@@ -411,8 +404,9 @@ def objective(trial, table_name, func_tag, target_path, db_path=None):
     output_dim = y.shape[1]
 
     model, criterion, optimizer, scheduler = initialize_model(
-        input_dim, output_dim, hidden_dims, dropouts, lr, weight_decay, optimizer, scheduler_patience=5
+        input_dim, output_dim, hidden_dims, dropouts, lr, weight_decay, optimizer_name, scheduler_patience=5
     )
+
 
     # Train the model
     train_model(model, train_loader, val_loader, criterion, optimizer, scheduler, num_epochs=50, patience=patience)
