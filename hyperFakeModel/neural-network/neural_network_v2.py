@@ -118,24 +118,46 @@ def create_sample_data(n_samples=10000):
     y = df[OUTPUT_COLS].values
     return X, y
 
-
-def load_data_from_db(db_path, table_name, func_tag):
-    """Load data from SQLite database and return features and targets as numpy arrays."""
-    # Read data from database
+def load_data_from_dbs(dbs_path, table_name, func_tag):
+    """Load data from all SQLite databases in a directory and return features and targets as numpy arrays."""
+    all_dfs = []
     query = f"SELECT {', '.join(INPUT_COLS + OUTPUT_COLS)} FROM {table_name} WHERE function_image_tag = '{func_tag}'"
-    df = None
-    try:
-        with sqlite3.connect(db_path) as conn:
-            df = pd.read_sql_query(query, conn)
-    except Exception as e:
-        print(f"Error loading data: {e}")
-    if df is None or df.empty:
-        raise EmptyDataError(f"DataFrame is empty: check the state of the db: {db_path}")
-    # Split features and targets
-    X = df[INPUT_COLS].values
-    y = df[OUTPUT_COLS].values
-    print(f"Loaded {len(X)} rows from database")
+    for filename in os.listdir(dbs_path):
+        if filename.endswith('.db') or filename.endswith('.sqlite'):
+            db_path = os.path.join(dbs_path, filename)
+            df = None
+            try:
+                with sqlite3.connect(db_path) as conn:
+                    df = pd.read_sql_query(query, conn)
+            except Exception as e:
+                print(f"Error loading data from {db_path}: {e}")
+            if df is not None and not df.empty:
+                all_dfs.append(df)
+    if not all_dfs:
+        raise EmptyDataError(f"No data loaded from any database in directory: {dbs_path}")
+    combined_df = pd.concat(all_dfs, ignore_index=True)
+    X = combined_df[INPUT_COLS].values
+    y = combined_df[OUTPUT_COLS].values
+    print(f"Loaded {len(X)} rows from {len(all_dfs)} databases in directory {dbs_path}")
     return X, y
+
+# def load_data_from_db(db_path, table_name, func_tag):
+#     """Load data from SQLite database and return features and targets as numpy arrays."""
+#     # Read data from database
+#     query = f"SELECT {', '.join(INPUT_COLS + OUTPUT_COLS)} FROM {table_name} WHERE function_image_tag = '{func_tag}'"
+#     df = None
+#     try:
+#         with sqlite3.connect(db_path) as conn:
+#             df = pd.read_sql_query(query, conn)
+#     except Exception as e:
+#         print(f"Error loading data: {e}")
+#     if df is None or df.empty:
+#         raise EmptyDataError(f"DataFrame is empty: check the state of the db: {db_path}")
+#     # Split features and targets
+#     X = df[INPUT_COLS].values
+#     y = df[OUTPUT_COLS].values
+#     print(f"Loaded {len(X)} rows from database")
+#     return X, y
 
 
 def train_epoch(model, train_data_loader, criterion, optimizer):
@@ -367,7 +389,7 @@ def initialize_model(input_dim, output_dim, hidden_dims, dropouts, lr, weight_de
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.1, patience=scheduler_patience)
     return model, criterion, optimizer, scheduler
 
-def objective(trial, table_name, func_tag, target_path, db_path=None):
+def objective(trial, table_name, func_tag, target_path, dbs_path=None):
     """
     Optuna objective function for hyperparameter optimization.
     This function defines hyperparameters to be optimized and trains the model once and returns the validation loss.
@@ -391,10 +413,10 @@ def objective(trial, table_name, func_tag, target_path, db_path=None):
     patience = trial.suggest_int("patience", 5, 20)
 
     # Prepare data
-    if db_path is None:
+    if dbs_path is None:
         X, y = create_sample_data()
     else:
-        X, y = load_data_from_db(db_path, table_name, func_tag)
+        X, y = load_data_from_dbs(dbs_path, table_name, func_tag)
 
     # Split data and prepare dataloaders
     X_train, X_val, _, y_train, y_val, _ = split_data(X, y)
@@ -418,7 +440,7 @@ def objective(trial, table_name, func_tag, target_path, db_path=None):
 def main(table_name,
          func_tag,
          target_path,
-         db_path=None,
+         dbs_path=None,
          hyperparams=None,
     ):
     """Main training pipeline."""
@@ -428,10 +450,10 @@ def main(table_name,
     print(f"Starting training pipeline for {func_tag} using device {DEVICE}.")
 
     # Load and preprocess data to tensors
-    if db_path is None:
+    if dbs_path is None:
         X, y = create_sample_data()
     else:
-        X, y = load_data_from_db(db_path, table_name, func_tag)
+        X, y = load_data_from_dbs(dbs_path, table_name, func_tag)
 
     # Split data
     X_train, X_val, X_test, y_train, y_val, y_test = split_data(X, y)
@@ -506,12 +528,12 @@ def main_manual():
     short_names = ["bfs", "thumbnailer", "echo"]
     db_name = "metrics.db"
     curr_dir = os.path.dirname(os.path.abspath(__file__))
-    db_path = curr_dir + "/../../benchmarks/" + db_name
+    dbs_path = curr_dir + "/../../../dbs/"
     table_name = "training_data"
 
     for func_tag, short_name in zip(func_tags, short_names):
         target_path = curr_dir + "/" + short_name + ".onnx"
-        main(table_name, func_tag, target_path, db_path=db_path)
+        main(table_name, func_tag, target_path, dbs_path=dbs_path)
 
 def main_optuna(trials=20):
     """Main function to run the training pipeline with Optuna hyperparameter optimization."""
@@ -519,23 +541,22 @@ def main_optuna(trials=20):
     func_tags = ["hyperfaas-thumbnailer-json:latest"]
     #short_names = ["bfs", "thumbnailer", "echo"]
     short_names = ["thumbnailer"]
-    db_name = "1h_best_run.db"
     curr_dir = os.path.dirname(os.path.abspath(__file__))
-    db_path = curr_dir + "/../../../dbs/" + db_name
+    dbs_path = curr_dir + "/../../../dbs/"
     table_name = "training_data"
 
     for func_tag, short_name in zip(func_tags, short_names):
         target_path = curr_dir + "/" + short_name + ".onnx"
 
         # Wrap the objective function with partial to pass additional arguments
-        wrapped_objective = partial(objective, table_name=table_name, func_tag=func_tag, target_path=target_path, db_path=db_path)
+        wrapped_objective = partial(objective, table_name=table_name, func_tag=func_tag, target_path=target_path, dbs_path=dbs_path)
 
         # Create an Optuna study and optimize
-        identifier =  "study_" + datetime.now().strftime("%Y%m%d_%H%M%S")
+        identifier =  "study_" + short_name + datetime.now().strftime("%Y%m%d_%H%M%S")
         study = optuna.create_study(direction="minimize", study_name=identifier, storage=f"sqlite:///{identifier}.db")
         study.optimize(wrapped_objective, n_trials=trials)
 
-        print("Beste Parameter wurden gefunden:")
+        print("Study over, the following optimized parameters were established:")
         for key, value in study.best_params.items():
             print(f"{key}: {value}")
 
@@ -543,10 +564,10 @@ def main_optuna(trials=20):
         requests.post("https://ntfy.sh/hyperfake", data="\n".join(f"{k}: {v}" for k, v in study.best_params.items()).encode("utf-8"))
 
         # Save the best hyperparameters
-        n_layers = best_params['n_layers']
+        n_layers = study.best_params['n_layers']
         hyperparams = {
-            "hidden_dims": [best_params[f'hidden_size_l{i}'] for i in range(n_layers)],
-            "dropouts": [best_params[f'dropout_l{i}'] for i in range(n_layers)],
+            "hidden_dims": [study.best_params[f'hidden_size_l{i}'] for i in range(n_layers)],
+            "dropouts": [study.best_params[f'dropout_l{i}'] for i in range(n_layers)],
             "lr": study.best_params["lr"],
             "weight_decay": study.best_params["weight_decay"],
             "batch_size": study.best_params["batch_size"],
@@ -555,7 +576,7 @@ def main_optuna(trials=20):
         }
 
         # Train the model with the best hyperparameters
-        main(table_name, func_tag, target_path, db_path=db_path, hyperparams=hyperparams)
+        main(table_name, func_tag, target_path, dbs_path=dbs_path, hyperparams=hyperparams)
 
 
 
