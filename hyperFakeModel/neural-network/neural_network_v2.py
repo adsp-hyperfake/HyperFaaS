@@ -130,7 +130,12 @@ def load_data_from_dbs(dbs_path, table_name, func_tag):
                 with sqlite3.connect(db_path) as conn:
                     df = pd.read_sql_query(query, conn)
             except Exception as e:
-                print(f"Error loading data from {db_path}: {e}")
+                print(
+                    f"{'-'*60}\n"
+                    f"Error loading data from {db_path}: {e}\n"
+                    f"Continuing with remaining databases...\n"
+                    f"{'-'*60}\n"
+                )
             if df is not None and not df.empty:
                 all_dfs.append(df)
     if not all_dfs:
@@ -138,7 +143,7 @@ def load_data_from_dbs(dbs_path, table_name, func_tag):
     combined_df = pd.concat(all_dfs, ignore_index=True)
     X = combined_df[INPUT_COLS].values
     y = combined_df[OUTPUT_COLS].values
-    print(f"Loaded {len(X)} rows from {len(all_dfs)} databases in directory {dbs_path}")
+    print(f"Loaded {len(X)} rows from {len(all_dfs)} database{'s' if len(all_dfs) > 1 else ''} in directory {dbs_path}")
     return X, y
 
 # def load_data_from_db(db_path, table_name, func_tag):
