@@ -543,9 +543,10 @@ def main_optuna(trials=20):
         requests.post("https://ntfy.sh/hyperfake", data="\n".join(f"{k}: {v}" for k, v in study.best_params.items()).encode("utf-8"))
 
         # Save the best hyperparameters
+        n_layers = best_params['n_layers']
         hyperparams = {
-            "hidden_dims": [study.best_params["hidden_dim1"], study.best_params["hidden_dim2"], study.best_params["hidden_dim3"]],
-            "dropouts": [study.best_params["dropout1"], study.best_params["dropout2"], study.best_params["dropout3"]],
+            "hidden_dims": [best_params[f'hidden_size_l{i}'] for i in range(n_layers)],
+            "dropouts": [best_params[f'dropout_l{i}'] for i in range(n_layers)],
             "lr": study.best_params["lr"],
             "weight_decay": study.best_params["weight_decay"],
             "batch_size": study.best_params["batch_size"],
