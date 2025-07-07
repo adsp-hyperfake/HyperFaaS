@@ -24,9 +24,8 @@ add_proto_definitions()
 @click.option('--containerized', is_flag=True, help='Use socket to connect to Docker.')
 @click.option("-m", "--model", "model", multiple=True, nargs=2, default=[], help='Add a model: <model_path> <image_name>')
 @click.option('--update-buffer-size', default=None, type=int, help='Update buffer size.')  
-@click.option('--leaf-address', default='localhost:50050', help='Address of the leaf server.')
 @click.pass_context
-def main(ctx, address, database_type, runtime, workers, maxrpcs, timeout, auto_remove, log_level, log_format, log_file, containerized, update_buffer_size, model, leaf_address):
+def main(ctx, address, database_type, runtime, workers, maxrpcs, timeout, auto_remove, log_level, log_format, log_file, containerized, update_buffer_size, model):
     setup_logger(log_level, log_file)
 
     db_address = "localhost:8999"
@@ -67,7 +66,6 @@ def main(ctx, address, database_type, runtime, workers, maxrpcs, timeout, auto_r
 
         # Extra parameters
         db_address=db_address,
-        leaf_address=leaf_address,
 
         # Models
         models=models_dict
@@ -168,8 +166,9 @@ def test_call(ctx):
     logger.info(f"Function call response: {response}")
 
 @main.command()
+@click.option('--leaf-address', default='localhost:50050', help='Address of the leaf server.')
 @click.pass_context
-def test_call_leaf(ctx):
+def test_call_leaf(ctx, leaf_address):
     import grpc
     
     from .api.leaf.leaf_pb2_grpc import LeafStub
@@ -177,9 +176,9 @@ def test_call_leaf(ctx):
     from .api.common.common_pb2 import ImageTag, Config, CPUConfig
     
     logger = logging.getLogger()
-    config: WorkerConfig = ctx.obj
     
-    channel = grpc.insecure_channel(config.leaf_address)
+    
+    channel = grpc.insecure_channel(leaf_address)
     stub = LeafStub(channel)
     
     request = CreateFunctionRequest(
