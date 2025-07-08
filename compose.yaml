@@ -71,7 +71,7 @@ services:
      "--panic-backoff=1s",
      "--panic-backoff-increase=1s",
      "--panic-max-backoff=10s",
-     "--max-connection-idle=3s"]
+     "--max-connection-idle=10s"]
     develop:
         watch:
             - action: rebuild
