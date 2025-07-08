@@ -68,7 +68,6 @@ func (s *SmallState) getStatusUpdateStream(ctx context.Context, workerID WorkerI
 func (s *SmallState) ListenToWorkerStatusUpdates(ctx context.Context, workerID WorkerID) {
 	for {
 		statusUpdates, conn, err := s.getStatusUpdateStream(ctx, workerID)
-		defer conn.Close()
 		if err != nil {
 			s.logger.Error("Failed to get status update stream", "workerID", workerID, "error", err)
 			// Wait a bit before retrying
@@ -76,35 +75,38 @@ func (s *SmallState) ListenToWorkerStatusUpdates(ctx context.Context, workerID W
 			continue
 		}
 
-		for {
-			update, err := statusUpdates.Recv()
-			if err == io.EOF {
-				s.logger.Debug("Status update stream closed", "workerID", workerID)
-				break
-			}
-			if err != nil {
-				s.logger.Error("Failed to receive status update", "error", err)
-				break // Break inner loop to reconnect
-			}
-
-			switch update.Type {
-			case controllerpb.VirtualizationType_TYPE_CONTAINER:
-				switch update.Event {
-				case controllerpb.Event_EVENT_TIMEOUT:
-					s.handleContainerTimeout(workerID, FunctionID(update.FunctionId.Id), InstanceID(update.InstanceId.Id))
-				case controllerpb.Event_EVENT_DOWN:
-					s.handleContainerDown(workerID, FunctionID(update.FunctionId.Id), InstanceID(update.InstanceId.Id))
-				case controllerpb.Event_EVENT_START:
-				case controllerpb.Event_EVENT_STOP:
-				case controllerpb.Event_EVENT_RUNNING:
-				case controllerpb.Event_EVENT_CALL:
-				default:
-					//r.logger.Warn("Received status update of unknown event", "event", update.Event)
+		func() {
+			defer conn.Close()
+			for {
+				update, err := statusUpdates.Recv()
+				if err == io.EOF {
+					s.logger.Debug("Status update stream closed", "workerID", workerID)
+					return
 				}
-			default:
-				s.logger.Warn("Received status update of unknown type", "type", update.Type)
+				if err != nil {
+					s.logger.Error("Failed to receive status update", "error", err)
+					return
+				}
+
+				switch update.Type {
+				case controllerpb.VirtualizationType_TYPE_CONTAINER:
+					switch update.Event {
+					case controllerpb.Event_EVENT_TIMEOUT:
+						s.handleContainerTimeout(workerID, FunctionID(update.FunctionId.Id), InstanceID(update.InstanceId.Id))
+					case controllerpb.Event_EVENT_DOWN:
+						s.handleContainerDown(workerID, FunctionID(update.FunctionId.Id), InstanceID(update.InstanceId.Id))
+					case controllerpb.Event_EVENT_START:
+					case controllerpb.Event_EVENT_STOP:
+					case controllerpb.Event_EVENT_RUNNING:
+					case controllerpb.Event_EVENT_CALL:
+					default:
+						//r.logger.Warn("Received status update of unknown event", "event", update.Event)
+					}
+				default:
+					s.logger.Warn("Received status update of unknown type", "type", update.Type)
+				}
 			}
-		}
+		}()
 	}
 }
 
