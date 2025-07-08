@@ -35,6 +35,7 @@ INPUT_COLS = [
 OUTPUT_COLS = ["function_runtime", "function_cpu_usage", "function_ram_usage"]
 CURR_DIR = os.path.dirname(os.path.abspath(__file__))
 
+
 class CustomDataset(Dataset):
     def __init__(self, X, y, scaler_X=None, scaler_y=None, fit_scalers=True):
         if scaler_X is None:
@@ -79,10 +80,10 @@ class MLP(nn.Module):
         self.output_dim = output_dim
 
         # Initialize scaling parameters as buffers (will be set later)
-        self.register_buffer('input_mean', torch.zeros(input_dim))
-        self.register_buffer('input_scale', torch.ones(input_dim))
-        self.register_buffer('output_mean', torch.zeros(output_dim))
-        self.register_buffer('output_scale', torch.ones(output_dim))
+        self.register_buffer("input_mean", torch.zeros(input_dim))
+        self.register_buffer("input_scale", torch.ones(input_dim))
+        self.register_buffer("output_mean", torch.zeros(output_dim))
+        self.register_buffer("output_scale", torch.ones(output_dim))
 
         # Build the main network
         layers = []
@@ -123,9 +124,12 @@ class MLP(nn.Module):
 
         if output_scaler is not None:
             output_mean_tensor = torch.tensor(output_scaler.mean_, dtype=torch.float32)
-            output_scale_tensor = torch.tensor(output_scaler.scale_, dtype=torch.float32)
+            output_scale_tensor = torch.tensor(
+                output_scaler.scale_, dtype=torch.float32
+            )
             self.output_mean.copy_(output_mean_tensor)
             self.output_scale.copy_(output_scale_tensor)
+
 
 def create_sample_data(n_samples=10000):
     """Create sample data for demonstration purposes"""
@@ -138,19 +142,20 @@ def create_sample_data(n_samples=10000):
         "worker_ram_usage": np.random.randint(1, 10, n_samples),
         "function_runtime": np.random.randint(1, 10, n_samples),
         "function_cpu_usage": np.random.randint(1, 10, n_samples),
-        "function_ram_usage": np.random.randint(1, 10, n_samples)
+        "function_ram_usage": np.random.randint(1, 10, n_samples),
     }
     df = pd.DataFrame(data)
     X = df[INPUT_COLS].values
     y = df[OUTPUT_COLS].values
     return X, y
 
+
 def load_data_from_dbs(dbs_path, table_name, func_tag):
     """Load data from all SQLite databases in a directory and return features and targets as numpy arrays."""
     all_dfs = []
     query = f"SELECT {', '.join(INPUT_COLS + OUTPUT_COLS)} FROM {table_name} WHERE function_image_tag = '{func_tag}'"
     for filename in os.listdir(dbs_path):
-        if filename.endswith('.db') or filename.endswith('.sqlite'):
+        if filename.endswith(".db") or filename.endswith(".sqlite"):
             db_path = os.path.join(dbs_path, filename)
             df = None
             try:
@@ -158,29 +163,34 @@ def load_data_from_dbs(dbs_path, table_name, func_tag):
                     df = pd.read_sql_query(query, conn)
             except Exception as e:
                 print(
-                    f"{'-'*60}\n"
+                    f"{'-' * 60}\n"
                     f"Error loading data from {db_path}: {e}\n"
                     f"Continuing with remaining databases...\n"
-                    f"{'-'*60}"
+                    f"{'-' * 60}"
                 )
             if df is not None and not df.empty:
                 all_dfs.append(df)
     if not all_dfs:
-        raise EmptyDataError(f"No data loaded from any database in directory: {dbs_path}")
+        raise EmptyDataError(
+            f"No data loaded from any database in directory: {dbs_path}"
+        )
     combined_df = pd.concat(all_dfs, ignore_index=True)
     # clean rows containing zero values
     safe_columns = ["active_function_calls_count"]
-    columns_to_clean = [column for column in INPUT_COLS + OUTPUT_COLS if column not in safe_columns]
+    columns_to_clean = [
+        column for column in INPUT_COLS + OUTPUT_COLS if column not in safe_columns
+    ]
     mask = (combined_df[columns_to_clean] == 0).any(axis=1)
     cleaned_df = combined_df[~mask]
     X = cleaned_df[INPUT_COLS].values
     y = cleaned_df[OUTPUT_COLS].values
     print(
         f"Loaded {len(X)} rows from {len(all_dfs)} database{'s' if len(all_dfs) > 1 else ''} in directory '{dbs_path}'\n"
-        f"Cleaned a total of {len(combined_df)-len(X)} rows containing zero values in any of the following columns:\n\t"
+        f"Cleaned a total of {len(combined_df) - len(X)} rows containing zero values in any of the following columns:\n\t"
         f"{', '.join(columns_to_clean)}"
     )
     return X, y
+
 
 # def load_data_from_db(db_path, table_name, func_tag):
 #     """Load data from SQLite database and return features and targets as numpy arrays."""
@@ -211,8 +221,8 @@ def train_epoch(model, train_data_loader, criterion, optimizer):
         optimizer.zero_grad()
         # forward pass
         predictions = model(data)
-        prodictions_normalized = (predictions - model.output_mean)/model.output_scale
-        targets_normalized = (targets - model.output_mean)/model.output_scale
+        prodictions_normalized = (predictions - model.output_mean) / model.output_scale
+        targets_normalized = (targets - model.output_mean) / model.output_scale
         loss = criterion(prodictions_normalized, targets_normalized)
         # backward pass
         loss.backward()
@@ -239,8 +249,10 @@ def evaluate_model(model, data_loader, criterion):
 
             # Forward pass
             predictions = model(data)
-            prodictions_normalized = (predictions - model.output_mean)/model.output_scale
-            targets_normalized = (targets - model.output_mean)/model.output_scale
+            prodictions_normalized = (
+                predictions - model.output_mean
+            ) / model.output_scale
+            targets_normalized = (targets - model.output_mean) / model.output_scale
             # Loss calcs
             loss = criterion(prodictions_normalized, targets_normalized)
             total_loss += loss.item()
@@ -278,7 +290,6 @@ def train_model(
         f"Training for up to {num_epochs} epochs with early stopping (patience={patience})"
     )
     print("-" * 60)
-
 
     for epoch in tqdm(range(num_epochs), desc="Training Epochs", ncols=100):
         train_loss = train_epoch(model, train_data_loader, criterion, optimizer)
@@ -323,7 +334,6 @@ def train_model(
     return train_losses, val_losses
 
 
-
 def calculate_metrics(y_true, y_pred, target_names):
     """Calculate regression metrics for each target."""
     metrics = {}
@@ -353,6 +363,7 @@ def calculate_metrics(y_true, y_pred, target_names):
 
     return metrics
 
+
 def export_model_to_onnx(model, target_path):
     # Save the model
     model.eval()
@@ -361,11 +372,12 @@ def export_model_to_onnx(model, target_path):
         model.to(DEVICE),
         dummy_input.to(DEVICE),
         target_path,
-        input_names=['input'],
-        output_names=['output'],
-        do_constant_folding=True, # Optimize the model
+        input_names=["input"],
+        output_names=["output"],
+        do_constant_folding=True,  # Optimize the model
     )
     print(f"Exported model to {target_path}.")
+
 
 def predict(model, input_data):
     """Make predictions using the trained model."""
@@ -383,6 +395,7 @@ def predict(model, input_data):
 
     return predictions
 
+
 def plot_loss_curves(train_losses, val_losses):
     epochs = range(1, len(train_losses) + 1)
     plt.figure(figsize=(8, 5))
@@ -393,43 +406,76 @@ def plot_loss_curves(train_losses, val_losses):
     plt.title("Loss curves")
     plt.legend()
     plt.grid(True)
-    #plt.show()
+    # plt.show()
     plt.show(block=False)
 
     plt.pause(0.01)
 
+
 def split_data(X, y, test_size=0.35, val_size=0.5, seed=42):
-    X_temp, X_test, y_temp, y_test = train_test_split(X, y, test_size=test_size, random_state=seed)
-    X_train, X_val, y_train, y_val = train_test_split(X_temp, y_temp, test_size=val_size, random_state=seed)
+    X_temp, X_test, y_temp, y_test = train_test_split(
+        X, y, test_size=test_size, random_state=seed
+    )
+    X_train, X_val, y_train, y_val = train_test_split(
+        X_temp, y_temp, test_size=val_size, random_state=seed
+    )
     return X_train, X_val, X_test, y_train, y_val, y_test
 
-def prepare_dataloaders(X_train, y_train, X_val, y_val, batch_size, X_test=None, y_test=None):
+
+def prepare_dataloaders(
+    X_train, y_train, X_val, y_val, batch_size, X_test=None, y_test=None
+):
     train_dataset = CustomDataset(X_train, y_train, fit_scalers=True)
-    val_dataset = CustomDataset(X_val, y_val, scaler_X=train_dataset.scaler_X, scaler_y=train_dataset.scaler_y, fit_scalers=False)
+    val_dataset = CustomDataset(
+        X_val,
+        y_val,
+        scaler_X=train_dataset.scaler_X,
+        scaler_y=train_dataset.scaler_y,
+        fit_scalers=False,
+    )
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
     test_loader = None
     if X_test is not None and y_test is not None:
-        test_dataset = CustomDataset(X_test, y_test, scaler_X=train_dataset.scaler_X, scaler_y=train_dataset.scaler_y, fit_scalers=False)
+        test_dataset = CustomDataset(
+            X_test,
+            y_test,
+            scaler_X=train_dataset.scaler_X,
+            scaler_y=train_dataset.scaler_y,
+            fit_scalers=False,
+        )
         test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
     else:
         test_dataset = None
 
     return train_loader, val_loader, test_loader, train_dataset
 
-def initialize_model(input_dim, output_dim, hidden_dims, dropouts, lr, weight_decay, optimizer_name, scheduler_patience):
+
+def initialize_model(
+    input_dim,
+    output_dim,
+    hidden_dims,
+    dropouts,
+    lr,
+    weight_decay,
+    optimizer_name,
+    scheduler_patience,
+):
     model = MLP(input_dim, output_dim, hidden_dims, dropouts).to(DEVICE)
     criterion = nn.MSELoss()
-    if optimizer_name == 'Adam':
+    if optimizer_name == "Adam":
         optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
-    elif optimizer_name == 'SGD':
+    elif optimizer_name == "SGD":
         optimizer = optim.SGD(model.parameters(), lr=lr)
     else:
         optimizer = optim.RMSprop(model.parameters(), lr=lr)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.1, patience=scheduler_patience)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode="min", factor=0.1, patience=scheduler_patience
+    )
     return model, criterion, optimizer, scheduler
+
 
 def objective(trial, X=None, y=None, dbs_path=None):
     """
@@ -439,16 +485,16 @@ def objective(trial, X=None, y=None, dbs_path=None):
     """
 
     # Define hyperparameters and their search space
-    n_layers = trial.suggest_int('n_layers', 1, 4)
+    n_layers = trial.suggest_int("n_layers", 1, 4)
     hidden_dims = []
     dropouts = []
     for i in range(n_layers):
-        hidden_dim = trial.suggest_int(f'hidden_size_l{i}', 4, 128)
-        dropout= trial.suggest_float(f'dropout_l{i}', 0.01, 0.5)
+        hidden_dim = trial.suggest_int(f"hidden_size_l{i}", 4, 128)
+        dropout = trial.suggest_float(f"dropout_l{i}", 0.01, 0.5)
         hidden_dims.append(hidden_dim)
         dropouts.append(dropout)
 
-    optimizer_name = trial.suggest_categorical('optimizer', ['Adam', 'SGD', 'RMSprop'])
+    optimizer_name = trial.suggest_categorical("optimizer", ["Adam", "SGD", "RMSprop"])
     lr = trial.suggest_float("lr", 1e-5, 1e-2, log=True)
     weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-2, log=True)
     batch_size = trial.suggest_categorical("batch_size", [16, 32, 64, 128])
@@ -460,30 +506,50 @@ def objective(trial, X=None, y=None, dbs_path=None):
 
     # Split data and prepare dataloaders
     X_train, X_val, _, y_train, y_val, _ = split_data(X, y)
-    train_loader, val_loader, _, train_dataset = prepare_dataloaders(X_train, y_train, X_val, y_val, batch_size)
+    train_loader, val_loader, _, train_dataset = prepare_dataloaders(
+        X_train, y_train, X_val, y_val, batch_size
+    )
 
     # Define model, loss function, and optimizer
     input_dim = X.shape[1]
     output_dim = y.shape[1]
 
     model, criterion, optimizer, scheduler = initialize_model(
-        input_dim, output_dim, hidden_dims, dropouts, lr, weight_decay, optimizer_name, scheduler_patience=5
+        input_dim,
+        output_dim,
+        hidden_dims,
+        dropouts,
+        lr,
+        weight_decay,
+        optimizer_name,
+        scheduler_patience=5,
     )
 
     model.set_scalers(train_dataset.scaler_X, train_dataset.scaler_y)
 
     # Train the model
-    train_model(model, train_loader, val_loader, criterion, optimizer, scheduler, num_epochs=15, patience=patience)
+    train_model(
+        model,
+        train_loader,
+        val_loader,
+        criterion,
+        optimizer,
+        scheduler,
+        num_epochs=15,
+        patience=patience,
+    )
     val_loss, _, _ = evaluate_model(model, val_loader, criterion)
 
     return val_loss
 
-def main(func_tag,
-         target_path,
-         X=None,
-         y=None,
-         hyperparams=None,
-    ):
+
+def main(
+    func_tag,
+    target_path,
+    X=None,
+    y=None,
+    hyperparams=None,
+):
     """Main training pipeline."""
     torch.manual_seed(42)
     np.random.seed(42)
@@ -500,13 +566,13 @@ def main(func_tag,
     # If hyperparameters are provided, use them; otherwise, set default values
     if hyperparams is None:
         hyperparams = {
-           "hidden_dims": [95, 47, 9],
-           "dropouts": [0.34, 0.018, 0.116],
-           "lr": 0.001,
-           "weight_decay": 1.05e-05,
-           "batch_size": 64,
-           "patience": 10,
-           "optimizer": "Adam"
+            "hidden_dims": [95, 47, 9],
+            "dropouts": [0.34, 0.018, 0.116],
+            "lr": 0.001,
+            "weight_decay": 1.05e-05,
+            "batch_size": 64,
+            "patience": 10,
+            "optimizer": "Adam",
         }
 
     train_loader, val_loader, test_loader, train_dataset = prepare_dataloaders(
@@ -540,11 +606,13 @@ def main(func_tag,
         optimizer,
         scheduler,
         num_epochs=15,
-        patience=hyperparams["patience"]
+        patience=hyperparams["patience"],
     )
 
     # Evaluate on test set
-    test_loss, test_predictions, test_targets = evaluate_model(model, test_loader, criterion)
+    test_loss, test_predictions, test_targets = evaluate_model(
+        model, test_loader, criterion
+    )
     test_metrics = calculate_metrics(test_targets, test_predictions, OUTPUT_COLS)
 
     # Print test results
@@ -563,21 +631,26 @@ def main(func_tag,
 
 def main_manual():
     """Main function to run the training pipeline manually."""
-    func_tags = ["hyperfaas-bfs-json:latest", "hyperfaas-thumbnailer-json:latest", "hyperfaas-echo:latest"]
+    func_tags = [
+        "hyperfaas-bfs-json:latest",
+        "hyperfaas-thumbnailer-json:latest",
+        "hyperfaas-echo:latest",
+    ]
     short_names = ["bfs", "thumbnailer", "echo"]
     dbs_path = os.path.normpath(os.path.join(CURR_DIR, "..", "..", "..", "dbs"))
     table_name = "training_data"
 
     for func_tag, short_name in zip(func_tags, short_names):
         X, y = load_data_from_dbs(dbs_path, table_name, func_tag)
-        target_path = os.path.join(CURR_DIR,f"{short_name}.onnx")
+        target_path = os.path.join(CURR_DIR, f"{short_name}.onnx")
         main(table_name, func_tag, target_path, X=X, y=y)
+
 
 def main_optuna(trials=20, jobs=5):
     """Main function to run the training pipeline with Optuna hyperparameter optimization."""
-    #func_tags = ["hyperfaas-bfs-json:latest", "hyperfaas-thumbnailer-json:latest", "hyperfaas-echo:latest"]
+    # func_tags = ["hyperfaas-bfs-json:latest", "hyperfaas-thumbnailer-json:latest", "hyperfaas-echo:latest"]
     func_tags = ["hyperfaas-thumbnailer-json:latest"]
-    #short_names = ["bfs", "thumbnailer", "echo"]
+    # short_names = ["bfs", "thumbnailer", "echo"]
     short_names = ["thumbnailer"]
     dbs_path = os.path.normpath(os.path.join(CURR_DIR, "..", "..", "..", "dbs"))
     table_name = "training_data"
@@ -589,10 +662,14 @@ def main_optuna(trials=20, jobs=5):
         wrapped_objective = partial(objective, X=X, y=y, dbs_path=dbs_path)
 
         # Create an Optuna study and optimize
-        identifier =  "study_" + short_name + "_" + datetime.now().strftime("%Y%m%d_%H%M%S")
+        identifier = (
+            "study_" + short_name + "_" + datetime.now().strftime("%Y%m%d_%H%M%S")
+        )
         study_db_path = os.path.join(CURR_DIR, f"{identifier}.db")
         study_db_uri = f"sqlite:///{study_db_path}"
-        study = optuna.create_study(direction="minimize", study_name=identifier, storage=study_db_uri)
+        study = optuna.create_study(
+            direction="minimize", study_name=identifier, storage=study_db_uri
+        )
         study.optimize(wrapped_objective, n_trials=trials, n_jobs=jobs)
 
         print("Study over, the following optimized parameters were established:")
@@ -600,24 +677,30 @@ def main_optuna(trials=20, jobs=5):
             print(f"{key}: {value}")
 
         # Send notification via ntfy
-        requests.post("https://ntfy.sh/hyperfake", data="\n".join(f"{k}: {v}" for k, v in study.best_params.items()).encode("utf-8"))
+        requests.post(
+            "https://ntfy.sh/hyperfake",
+            data="\n".join(f"{k}: {v}" for k, v in study.best_params.items()).encode(
+                "utf-8"
+            ),
+        )
 
         # Save the best hyperparameters
-        n_layers = study.best_params['n_layers']
+        n_layers = study.best_params["n_layers"]
         hyperparams = {
-            "hidden_dims": [study.best_params[f'hidden_size_l{i}'] for i in range(n_layers)],
-            "dropouts": [study.best_params[f'dropout_l{i}'] for i in range(n_layers)],
+            "hidden_dims": [
+                study.best_params[f"hidden_size_l{i}"] for i in range(n_layers)
+            ],
+            "dropouts": [study.best_params[f"dropout_l{i}"] for i in range(n_layers)],
             "lr": study.best_params["lr"],
             "weight_decay": study.best_params["weight_decay"],
             "batch_size": study.best_params["batch_size"],
             "patience": study.best_params["patience"],
-            "optimizer": study.best_params["optimizer"]
+            "optimizer": study.best_params["optimizer"],
         }
 
         # Train the model with the best hyperparameters
-        target_path = os.path.join(CURR_DIR,f"{short_name}.onnx")
+        target_path = os.path.join(CURR_DIR, f"{short_name}.onnx")
         main(func_tag, target_path, X=X, y=y, hyperparams=hyperparams)
-
 
 
 if __name__ == "__main__":
