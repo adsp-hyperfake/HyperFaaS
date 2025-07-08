@@ -74,10 +74,10 @@ class MLP(nn.Module):
         dropouts=[0.3, 0.23, 0.15],
     ):
         super().__init__()
-        
+
         self.input_dim = input_dim
         self.output_dim = output_dim
-        
+
         # Initialize scaling parameters as buffers (will be set later)
         self.register_buffer('input_mean', torch.zeros(input_dim))
         self.register_buffer('input_scale', torch.ones(input_dim))
@@ -105,13 +105,12 @@ class MLP(nn.Module):
         """Forward pass through the network with integrated scaling."""
         # Input scaling = (x - mean) / scale
         x_scaled = (x - self.input_mean) / self.input_scale
-        
+
         # Forward pass through the network
         output_scaled = self.model(x_scaled)
-        
         # Output inverse scaling = output * scale + mean
         output = output_scaled * self.output_scale + self.output_mean
-        
+
         return output
 
     def set_scalers(self, input_scaler, output_scaler):
@@ -121,13 +120,13 @@ class MLP(nn.Module):
             input_scale_tensor = torch.tensor(input_scaler.scale_, dtype=torch.float32)
             self.input_mean.copy_(input_mean_tensor)
             self.input_scale.copy_(input_scale_tensor)
-            
+
         if output_scaler is not None:
             output_mean_tensor = torch.tensor(output_scaler.mean_, dtype=torch.float32)
             output_scale_tensor = torch.tensor(output_scaler.scale_, dtype=torch.float32)
             self.output_mean.copy_(output_mean_tensor)
             self.output_scale.copy_(output_scale_tensor)
-            
+
 def create_sample_data(n_samples=10000):
     """Create sample data for demonstration purposes"""
     # Just for testing. This will obviously lead to a terrible model evaluation since it's all random!
@@ -210,15 +209,14 @@ def train_epoch(model, train_data_loader, criterion, optimizer):
     for data, targets in train_data_loader:
         data, targets = data.to(DEVICE), targets.to(DEVICE)
         optimizer.zero_grad()
-        
-        # Normalize targets
-        targets_norm = (targets - model.output_mean) / model.output_scale
-        
         # forward pass
-        outputs = model(data)
-        loss = criterion(outputs, targets_norm)
+        predictions = model(data)
+        prodictions_normalized = (predictions - model.output_mean)/model.output_scale
+        targets_normalized = (targets - model.output_mean)/model.output_scale
+        loss = criterion(prodictions_normalized, targets_normalized)
         # backward pass
         loss.backward()
+        # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         # update weights
         optimizer.step()
 
@@ -240,18 +238,16 @@ def evaluate_model(model, data_loader, criterion):
             data, targets = data.to(DEVICE), targets.to(DEVICE)
 
             # Forward pass
-            outputs = model(data)
-            
-            # Normalize targets
-            targets_norm = (targets - model.output_mean) / model.output_scale
-
-            # Calculate loss
-            loss = criterion(outputs, targets_norm)
+            predictions = model(data)
+            prodictions_normalized = (predictions - model.output_mean)/model.output_scale
+            targets_normalized = (targets - model.output_mean)/model.output_scale
+            # Loss calcs
+            loss = criterion(prodictions_normalized, targets_normalized)
             total_loss += loss.item()
             num_batches += 1
             # .cpu() copies from gpu to cpu mem if needed
-            all_predictions.append(outputs.cpu().numpy())
-            all_targets.append(targets.cpu().numpy())
+            all_predictions.append(prodictions_normalized.cpu().numpy())
+            all_targets.append(targets_normalized.cpu().numpy())
 
     all_predictions = np.concatenate(all_predictions, axis=0)
     all_targets = np.concatenate(all_targets, axis=0)
@@ -275,6 +271,7 @@ def train_model(
     patience_counter = 0
     train_losses = []
     val_losses = []
+    best_model_state_dict = {}
 
     print("Starting training...")
     print(
@@ -282,12 +279,12 @@ def train_model(
     )
     print("-" * 60)
 
+
     for epoch in tqdm(range(num_epochs), desc="Training Epochs", ncols=100):
         train_loss = train_epoch(model, train_data_loader, criterion, optimizer)
 
         # Evaluate on validation set
         val_loss, _, _ = evaluate_model(model, val_data_loader, criterion)
-
         # Update learning rate scheduler
         scheduler.step(val_loss)
 
@@ -309,7 +306,7 @@ def train_model(
             best_val_loss = val_loss
             patience_counter = 0
             # Save best model
-            torch.save(model.state_dict(), os.path.join(CURR_DIR, "best_model.pth"))
+            best_model_state_dict = model.state_dict()
         else:
             patience_counter += 1
 
@@ -318,12 +315,13 @@ def train_model(
             break
 
     # Load best model
-    model.load_state_dict(torch.load(os.path.join(CURR_DIR, "best_model.pth")))
+    model.load_state_dict(best_model_state_dict)
 
     print("Training completed!")
     print(f"Best validation loss: {best_val_loss:.6f}")
 
     return train_losses, val_losses
+
 
 
 def calculate_metrics(y_true, y_pred, target_names):
@@ -433,7 +431,7 @@ def initialize_model(input_dim, output_dim, hidden_dims, dropouts, lr, weight_de
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.1, patience=scheduler_patience)
     return model, criterion, optimizer, scheduler
 
-def objective(trial, table_name, func_tag, target_path, dbs_path=None):
+def objective(trial, X=None, y=None, dbs_path=None):
     """
     Optuna objective function for hyperparameter optimization.
     This function defines hyperparameters to be optimized and trains the model once and returns the validation loss.
@@ -457,10 +455,8 @@ def objective(trial, table_name, func_tag, target_path, dbs_path=None):
     patience = trial.suggest_int("patience", 5, 20)
 
     # Prepare data
-    if dbs_path is None:
+    if X is None and y is None:
         X, y = create_sample_data()
-    else:
-        X, y = load_data_from_dbs(dbs_path, table_name, func_tag)
 
     # Split data and prepare dataloaders
     X_train, X_val, _, y_train, y_val, _ = split_data(X, y)
@@ -473,19 +469,19 @@ def objective(trial, table_name, func_tag, target_path, dbs_path=None):
     model, criterion, optimizer, scheduler = initialize_model(
         input_dim, output_dim, hidden_dims, dropouts, lr, weight_decay, optimizer_name, scheduler_patience=5
     )
-    
+
     model.set_scalers(train_dataset.scaler_X, train_dataset.scaler_y)
 
     # Train the model
-    train_model(model, train_loader, val_loader, criterion, optimizer, scheduler, num_epochs=50, patience=patience)
+    train_model(model, train_loader, val_loader, criterion, optimizer, scheduler, num_epochs=15, patience=patience)
     val_loss, _, _ = evaluate_model(model, val_loader, criterion)
 
     return val_loss
 
-def main(table_name,
-         func_tag,
+def main(func_tag,
          target_path,
-         dbs_path=None,
+         X=None,
+         y=None,
          hyperparams=None,
     ):
     """Main training pipeline."""
@@ -495,10 +491,8 @@ def main(table_name,
     print(f"Starting training pipeline for {func_tag} using device {DEVICE}.")
 
     # Load and preprocess data to tensors
-    if dbs_path is None:
+    if X is None and y is None:
         X, y = create_sample_data()
-    else:
-        X, y = load_data_from_dbs(dbs_path, table_name, func_tag)
 
     # Split data
     X_train, X_val, X_test, y_train, y_val, y_test = split_data(X, y)
@@ -534,7 +528,7 @@ def main(table_name,
         hyperparams["optimizer"],
         scheduler_patience=10,
     )
-    
+
     model.set_scalers(train_dataset.scaler_X, train_dataset.scaler_y)
 
     # Train the model
@@ -545,7 +539,7 @@ def main(table_name,
         criterion,
         optimizer,
         scheduler,
-        num_epochs=100,
+        num_epochs=15,
         patience=hyperparams["patience"]
     )
 
@@ -575,10 +569,11 @@ def main_manual():
     table_name = "training_data"
 
     for func_tag, short_name in zip(func_tags, short_names):
+        X, y = load_data_from_dbs(dbs_path, table_name, func_tag)
         target_path = os.path.join(CURR_DIR,f"{short_name}.onnx")
-        main(table_name, func_tag, target_path, dbs_path=dbs_path)
+        main(table_name, func_tag, target_path, X=X, y=y)
 
-def main_optuna(trials=20):
+def main_optuna(trials=20, jobs=5):
     """Main function to run the training pipeline with Optuna hyperparameter optimization."""
     #func_tags = ["hyperfaas-bfs-json:latest", "hyperfaas-thumbnailer-json:latest", "hyperfaas-echo:latest"]
     func_tags = ["hyperfaas-thumbnailer-json:latest"]
@@ -588,17 +583,17 @@ def main_optuna(trials=20):
     table_name = "training_data"
 
     for func_tag, short_name in zip(func_tags, short_names):
-        target_path = os.path.join(CURR_DIR,f"{short_name}.onnx")
+        X, y = load_data_from_dbs(dbs_path, table_name, func_tag)
 
         # Wrap the objective function with partial to pass additional arguments
-        wrapped_objective = partial(objective, table_name=table_name, func_tag=func_tag, target_path=target_path, dbs_path=dbs_path)
+        wrapped_objective = partial(objective, X=X, y=y, dbs_path=dbs_path)
 
         # Create an Optuna study and optimize
         identifier =  "study_" + short_name + "_" + datetime.now().strftime("%Y%m%d_%H%M%S")
         study_db_path = os.path.join(CURR_DIR, f"{identifier}.db")
         study_db_uri = f"sqlite:///{study_db_path}"
         study = optuna.create_study(direction="minimize", study_name=identifier, storage=study_db_uri)
-        study.optimize(wrapped_objective, n_trials=trials)
+        study.optimize(wrapped_objective, n_trials=trials, n_jobs=jobs)
 
         print("Study over, the following optimized parameters were established:")
         for key, value in study.best_params.items():
@@ -620,7 +615,8 @@ def main_optuna(trials=20):
         }
 
         # Train the model with the best hyperparameters
-        main(table_name, func_tag, target_path, dbs_path=dbs_path, hyperparams=hyperparams)
+        target_path = os.path.join(CURR_DIR,f"{short_name}.onnx")
+        main(func_tag, target_path, X=X, y=y, hyperparams=hyperparams)
 
 
 
