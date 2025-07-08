@@ -405,3 +405,5 @@ $RECYCLE.BIN/
 
 benchmarks/metrics.db
 hyperFakeModel/neural-network/*.pth
+hyperFakeModel/neural-network/*.onnx
+hyperFakeModel/neural-network/*.db

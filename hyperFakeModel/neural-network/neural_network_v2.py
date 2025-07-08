@@ -32,9 +32,8 @@ INPUT_COLS = [
     "worker_cpu_usage",
     "worker_ram_usage",
 ]
-
 OUTPUT_COLS = ["function_runtime", "function_cpu_usage", "function_ram_usage"]
-
+CURR_DIR = os.path.dirname(os.path.abspath(__file__))
 
 class CustomDataset(Dataset):
     def __init__(self, X, y, scaler_X=None, scaler_y=None, fit_scalers=True):
@@ -134,16 +133,25 @@ def load_data_from_dbs(dbs_path, table_name, func_tag):
                     f"{'-'*60}\n"
                     f"Error loading data from {db_path}: {e}\n"
                     f"Continuing with remaining databases...\n"
-                    f"{'-'*60}\n"
+                    f"{'-'*60}"
                 )
             if df is not None and not df.empty:
                 all_dfs.append(df)
     if not all_dfs:
         raise EmptyDataError(f"No data loaded from any database in directory: {dbs_path}")
     combined_df = pd.concat(all_dfs, ignore_index=True)
-    X = combined_df[INPUT_COLS].values
-    y = combined_df[OUTPUT_COLS].values
-    print(f"Loaded {len(X)} rows from {len(all_dfs)} database{'s' if len(all_dfs) > 1 else ''} in directory {dbs_path}")
+    # clean rows containing zero values
+    safe_columns = ["active_function_calls_count"]
+    columns_to_clean = [column for column in INPUT_COLS + OUTPUT_COLS if column not in safe_columns]
+    mask = (combined_df[columns_to_clean] == 0).any(axis=1)
+    cleaned_df = combined_df[~mask]
+    X = cleaned_df[INPUT_COLS].values
+    y = cleaned_df[OUTPUT_COLS].values
+    print(
+        f"Loaded {len(X)} rows from {len(all_dfs)} database{'s' if len(all_dfs) > 1 else ''} in directory '{dbs_path}'\n"
+        f"Cleaned a total of {len(combined_df)-len(X)} rows containing zero values in any of the following columns:\n\t"
+        f"{', '.join(columns_to_clean)}"
+    )
     return X, y
 
 # def load_data_from_db(db_path, table_name, func_tag):
@@ -265,7 +273,7 @@ def train_model(
             best_val_loss = val_loss
             patience_counter = 0
             # Save best model
-            torch.save(model.state_dict(), "best_model.pth")
+            torch.save(model.state_dict(), os.path.join(CURR_DIR, "best_model.pth"))
         else:
             patience_counter += 1
 
@@ -274,7 +282,7 @@ def train_model(
             break
 
     # Load best model
-    model.load_state_dict(torch.load("best_model.pth"))
+    model.load_state_dict(torch.load(os.path.join(CURR_DIR, "best_model.pth")))
 
     print("Training completed!")
     print(f"Best validation loss: {best_val_loss:.6f}")
@@ -531,13 +539,11 @@ def main_manual():
     """Main function to run the training pipeline manually."""
     func_tags = ["hyperfaas-bfs-json:latest", "hyperfaas-thumbnailer-json:latest", "hyperfaas-echo:latest"]
     short_names = ["bfs", "thumbnailer", "echo"]
-    db_name = "metrics.db"
-    curr_dir = os.path.dirname(os.path.abspath(__file__))
-    dbs_path = curr_dir + "/../../../dbs/"
+    dbs_path = os.path.normpath(os.path.join(CURR_DIR, "..", "..", "..", "dbs"))
     table_name = "training_data"
 
     for func_tag, short_name in zip(func_tags, short_names):
-        target_path = curr_dir + "/" + short_name + ".onnx"
+        target_path = os.path.join(CURR_DIR,f"{short_name}.onnx")
         main(table_name, func_tag, target_path, dbs_path=dbs_path)
 
 def main_optuna(trials=20):
@@ -546,19 +552,20 @@ def main_optuna(trials=20):
     func_tags = ["hyperfaas-thumbnailer-json:latest"]
     #short_names = ["bfs", "thumbnailer", "echo"]
     short_names = ["thumbnailer"]
-    curr_dir = os.path.dirname(os.path.abspath(__file__))
-    dbs_path = curr_dir + "/../../../dbs/"
+    dbs_path = os.path.normpath(os.path.join(CURR_DIR, "..", "..", "..", "dbs"))
     table_name = "training_data"
 
     for func_tag, short_name in zip(func_tags, short_names):
-        target_path = curr_dir + "/" + short_name + ".onnx"
+        target_path = os.path.join(CURR_DIR,f"{short_name}.onnx")
 
         # Wrap the objective function with partial to pass additional arguments
         wrapped_objective = partial(objective, table_name=table_name, func_tag=func_tag, target_path=target_path, dbs_path=dbs_path)
 
         # Create an Optuna study and optimize
-        identifier =  "study_" + short_name + datetime.now().strftime("%Y%m%d_%H%M%S")
-        study = optuna.create_study(direction="minimize", study_name=identifier, storage=f"sqlite:///{identifier}.db")
+        identifier =  "study_" + short_name + "_" + datetime.now().strftime("%Y%m%d_%H%M%S")
+        study_db_path = os.path.join(CURR_DIR, f"{identifier}.db")
+        study_db_uri = f"sqlite:///{study_db_path}"
+        study = optuna.create_study(direction="minimize", study_name=identifier, storage=study_db_uri)
         study.optimize(wrapped_objective, n_trials=trials)
 
         print("Study over, the following optimized parameters were established:")
