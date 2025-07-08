@@ -183,6 +183,14 @@ run-full-pipeline time="1m" total_runs="3" address="localhost:50050":
     mv ./load-generator/generated_scenarios_*.json ~/training_data/${timestamp}/
     mv ./benchmarks/plots ~/training_data/${timestamp}/plots
 
+allow-reuse-connections:
+    # Allow reusing TIME_WAIT sockets for new connections when safe
+    sudo sysctl -w net.ipv4.tcp_tw_reuse=1
+watch-connections:
+    watch -n 1 'ss -a | grep 10.0.0.3:50050 | wc -l'
+see-connections:
+    ss -a | grep 10.0.0.3:50050 | awk '{print $2}' | sort | uniq -c
+
 clean-metrics:
     rm ./benchmarks/metrics.db 2> /dev/null
     rm ./load-generator/generated_scenarios.json 2> /dev/null
