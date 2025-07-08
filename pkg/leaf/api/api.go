@@ -84,66 +84,107 @@ func (s *LeafServer) CreateFunction(ctx context.Context, req *leaf.CreateFunctio
 
 func (s *LeafServer) ScheduleCall(ctx context.Context, req *leaf.ScheduleCallRequest) (*leaf.ScheduleCallResponse, error) {
 	leafGotRequestTimestamp := time.Now()
-	autoscaler, ok := s.state.GetAutoscaler(state.FunctionID(req.FunctionID.Id))
-	if !ok {
-		return nil, status.Errorf(codes.NotFound, "function id not found")
-	}
-	if autoscaler.IsScaledDown() {
-		err := autoscaler.ForceScaleUp(ctx)
-		if err != nil {
-			if errors.As(err, &state.TooManyStartingInstancesError{}) {
-				time.Sleep(s.leafConfig.PanicBackoff)
-				s.leafConfig.PanicBackoff = s.leafConfig.PanicBackoff + s.leafConfig.PanicBackoffIncrease
-				if s.leafConfig.PanicBackoff > s.leafConfig.PanicMaxBackoff {
-					s.leafConfig.PanicBackoff = s.leafConfig.PanicMaxBackoff
+
+	const maxRetryAttempts = 30
+	var retryCount int
+
+	originalPanicBackoff := s.leafConfig.PanicBackoff
+
+	for retryCount < maxRetryAttempts {
+		// maybe ctx is cancelled
+		select {
+		case <-ctx.Done():
+			return nil, status.Errorf(codes.Canceled, "request cancelled or timed out after %d retries: %v", retryCount, ctx.Err())
+		default:
+		}
+
+		autoscaler, ok := s.state.GetAutoscaler(state.FunctionID(req.FunctionID.Id))
+		if !ok {
+			return nil, status.Errorf(codes.NotFound, "function id not found")
+		}
+
+		if autoscaler.IsScaledDown() {
+			err := autoscaler.ForceScaleUp(ctx)
+			if err != nil {
+				if errors.As(err, &state.TooManyStartingInstancesError{}) {
+					retryCount++
+					s.logger.Debug("Too many starting instances, retrying", "retryCount", retryCount, "functionID", req.FunctionID.Id)
+
+					// Apply backoff and increase it
+					select {
+					case <-ctx.Done():
+						return nil, status.Errorf(codes.Canceled, "request cancelled during backoff after %d retries: %v", retryCount, ctx.Err())
+					case <-time.After(s.leafConfig.PanicBackoff):
+					}
+
+					s.leafConfig.PanicBackoff = s.leafConfig.PanicBackoff + s.leafConfig.PanicBackoffIncrease
+					if s.leafConfig.PanicBackoff > s.leafConfig.PanicMaxBackoff {
+						s.leafConfig.PanicBackoff = s.leafConfig.PanicMaxBackoff
+					}
+					continue
 				}
-				return s.ScheduleCall(ctx, req)
-			}
-			if errors.As(err, &state.ScaleUpFailedError{}) {
-				//TODO improve error message with better info.
-				return nil, status.Errorf(codes.ResourceExhausted, "failed to scale up function")
+				if errors.As(err, &state.ScaleUpFailedError{}) {
+					return nil, status.Errorf(codes.ResourceExhausted, "failed to scale up function after %d retries", retryCount)
+				}
+				return nil, status.Errorf(codes.Internal, "unexpected error during scale up: %v", err)
 			}
 		}
-	}
-	if autoscaler.IsPanicMode() {
-		time.Sleep(s.leafConfig.PanicBackoff)
-		s.leafConfig.PanicBackoff = s.leafConfig.PanicBackoff + s.leafConfig.PanicBackoffIncrease
-		if s.leafConfig.PanicBackoff > s.leafConfig.PanicMaxBackoff {
-			s.leafConfig.PanicBackoff = s.leafConfig.PanicMaxBackoff
+
+		if autoscaler.IsPanicMode() {
+			retryCount++
+			s.logger.Debug("Autoscaler in panic mode, retrying", "retryCount", retryCount, "functionID", req.FunctionID.Id)
+
+			// Apply backoff and increase it
+			select {
+			case <-ctx.Done():
+				return nil, status.Errorf(codes.Canceled, "request cancelled during panic mode backoff after %d retries: %v", retryCount, ctx.Err())
+			case <-time.After(s.leafConfig.PanicBackoff):
+			}
+
+			s.leafConfig.PanicBackoff = s.leafConfig.PanicBackoff + s.leafConfig.PanicBackoffIncrease
+			if s.leafConfig.PanicBackoff > s.leafConfig.PanicMaxBackoff {
+				s.leafConfig.PanicBackoff = s.leafConfig.PanicMaxBackoff
+			}
+			continue
 		}
-		return s.ScheduleCall(ctx, req)
+
+		s.leafConfig.PanicBackoff = originalPanicBackoff
+
+		// TODO: pick a better way to pick a worker.
+		randWorker := s.workerIds[rand.Intn(len(s.workerIds))]
+
+		s.functionMetricChansMutex.RLock()
+		metricChan := s.functionMetricChans[state.FunctionID(req.FunctionID.Id)]
+		s.functionMetricChansMutex.RUnlock()
+		metricChan <- true
+		defer func() {
+			metricChan <- false
+		}()
+
+		// Note: we send function id as instance id because I havent updated the proto yet. But the call instance endpoint is now call function. worker handles the instance id.
+		leafScheduledCallTimestamp := time.Now()
+		resp, callMetadata, err := s.callWorker(ctx, randWorker, state.FunctionID(req.FunctionID.Id), state.InstanceID(req.FunctionID.Id), req)
+		if err != nil {
+			return nil, err
+		}
+
+		defer func() {
+			trailer := metadata.New(map[string]string{
+				"callQueuedTimestamp":        callMetadata.CallQueuedTimestamp,
+				"gotResponseTimestamp":       callMetadata.GotResponseTimestamp,
+				"functionProcessingTime":     callMetadata.FunctionProcessingTime,
+				"instanceID":                 callMetadata.InstanceID,
+				"leafGotRequestTimestamp":    strconv.FormatInt(leafGotRequestTimestamp.UnixNano(), 10),
+				"leafScheduledCallTimestamp": strconv.FormatInt(leafScheduledCallTimestamp.UnixNano(), 10),
+			})
+			grpc.SetTrailer(ctx, trailer)
+		}()
+
+		return resp, nil
 	}
 
-	// TODO: pick a better way to pick a worker.
-	randWorker := s.workerIds[rand.Intn(len(s.workerIds))]
-
-	s.functionMetricChansMutex.RLock()
-	metricChan := s.functionMetricChans[state.FunctionID(req.FunctionID.Id)]
-	s.functionMetricChansMutex.RUnlock()
-	metricChan <- true
-	defer func() {
-		metricChan <- false
-	}()
-	// Note: we send function id as instance id because I havent updated the proto yet. But the call instance endpoint is now call function. worker handles the instance id.
-	leafScheduledCallTimestamp := time.Now()
-	resp, callMetadata, err := s.callWorker(ctx, randWorker, state.FunctionID(req.FunctionID.Id), state.InstanceID(req.FunctionID.Id), req)
-	if err != nil {
-		return nil, err
-	}
-
-	defer func() {
-		trailer := metadata.New(map[string]string{
-			"callQueuedTimestamp":        callMetadata.CallQueuedTimestamp,
-			"gotResponseTimestamp":       callMetadata.GotResponseTimestamp,
-			"functionProcessingTime":     callMetadata.FunctionProcessingTime,
-			"instanceID":                 callMetadata.InstanceID,
-			"leafGotRequestTimestamp":    strconv.FormatInt(leafGotRequestTimestamp.UnixNano(), 10),
-			"leafScheduledCallTimestamp": strconv.FormatInt(leafScheduledCallTimestamp.UnixNano(), 10),
-		})
-		grpc.SetTrailer(ctx, trailer)
-	}()
-
-	return resp, nil
+	// If we exhausted all retries
+	return nil, status.Errorf(codes.ResourceExhausted, "exceeded maximum retry attempts (%d) for function %s - check autoscaler and instance capacity", maxRetryAttempts, req.FunctionID.Id)
 }
 
 func NewLeafServer(
