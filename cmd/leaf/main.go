@@ -53,7 +53,7 @@ func main() {
 	panicBackoffIncrease := flag.Duration("panic-backoff-increase", time.Millisecond*50, "The backoff increase for the panic mode")
 	panicMaxBackoff := flag.Duration("panic-max-backoff", time.Second*1, "The maximum backoff for the panic mode")
 
-	// Memory optimization flags
+	// grpcServer config
 	maxConnectionIdle := flag.Duration("max-connection-idle", 15*time.Second, "Maximum time a connection can be idle before being closed")
 	keepaliveTime := flag.Duration("keepalive-time", 5*time.Second, "Time between keepalive pings")
 	keepaliveTimeout := flag.Duration("keepalive-timeout", 1*time.Second, "Timeout for keepalive pings")

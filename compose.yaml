@@ -70,7 +70,8 @@ services:
      "--max-running-instances-per-function=10",
      "--panic-backoff=1s",
      "--panic-backoff-increase=1s",
-     "--panic-max-backoff=10s"]
+     "--panic-max-backoff=10s",
+     "--max-connection-idle=3s"]
     develop:
         watch:
             - action: rebuild
