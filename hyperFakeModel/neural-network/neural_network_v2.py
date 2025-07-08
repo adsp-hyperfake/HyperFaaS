@@ -49,15 +49,12 @@ class CustomDataset(Dataset):
 
         # fit scalers for training data only!
         if fit_scalers:
-            self.X = self.scaler_X.fit_transform(X)
-            self.y = self.scaler_y.fit_transform(y)
-        else:
-            self.X = self.scaler_X.transform(X)
-            self.y = self.scaler_y.transform(y)
+            self.X = self.scaler_X.fit(X)
+            self.y = self.scaler_y.fit(y)
 
         # convert to tensors
-        self.X = torch.tensor(self.X, dtype=torch.float32)
-        self.y = torch.tensor(self.y, dtype=torch.float32)
+        self.X = torch.tensor(X, dtype=torch.float32)
+        self.y = torch.tensor(y, dtype=torch.float32)
 
     def __len__(self):
         return len(self.X)
@@ -77,7 +74,17 @@ class MLP(nn.Module):
         dropouts=[0.3, 0.23, 0.15],
     ):
         super().__init__()
+        
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+        
+        # Initialize scaling parameters as buffers (will be set later)
+        self.register_buffer('input_mean', torch.zeros(input_dim))
+        self.register_buffer('input_scale', torch.ones(input_dim))
+        self.register_buffer('output_mean', torch.zeros(output_dim))
+        self.register_buffer('output_scale', torch.ones(output_dim))
 
+        # Build the main network
         layers = []
         prev_dim = input_dim
 
@@ -95,10 +102,32 @@ class MLP(nn.Module):
         self.model = nn.Sequential(*layers)
 
     def forward(self, x):
-        """Forward pass through the network."""
-        return self.model(x)
+        """Forward pass through the network with integrated scaling."""
+        # Input scaling = (x - mean) / scale
+        x_scaled = (x - self.input_mean) / self.input_scale
+        
+        # Forward pass through the network
+        output_scaled = self.model(x_scaled)
+        
+        # Output inverse scaling = output * scale + mean
+        output = output_scaled * self.output_scale + self.output_mean
+        
+        return output
 
-
+    def set_scalers(self, input_scaler, output_scaler):
+        """Set the scalers after initialization"""
+        if input_scaler is not None:
+            input_mean_tensor = torch.tensor(input_scaler.mean_, dtype=torch.float32)
+            input_scale_tensor = torch.tensor(input_scaler.scale_, dtype=torch.float32)
+            self.input_mean.copy_(input_mean_tensor)
+            self.input_scale.copy_(input_scale_tensor)
+            
+        if output_scaler is not None:
+            output_mean_tensor = torch.tensor(output_scaler.mean_, dtype=torch.float32)
+            output_scale_tensor = torch.tensor(output_scaler.scale_, dtype=torch.float32)
+            self.output_mean.copy_(output_mean_tensor)
+            self.output_scale.copy_(output_scale_tensor)
+            
 def create_sample_data(n_samples=10000):
     """Create sample data for demonstration purposes"""
     # Just for testing. This will obviously lead to a terrible model evaluation since it's all random!
@@ -181,9 +210,13 @@ def train_epoch(model, train_data_loader, criterion, optimizer):
     for data, targets in train_data_loader:
         data, targets = data.to(DEVICE), targets.to(DEVICE)
         optimizer.zero_grad()
+        
+        # Normalize targets
+        targets_norm = (targets - model.output_mean) / model.output_scale
+        
         # forward pass
         outputs = model(data)
-        loss = criterion(outputs, targets)
+        loss = criterion(outputs, targets_norm)
         # backward pass
         loss.backward()
         # update weights
@@ -208,9 +241,12 @@ def evaluate_model(model, data_loader, criterion):
 
             # Forward pass
             outputs = model(data)
+            
+            # Normalize targets
+            targets_norm = (targets - model.output_mean) / model.output_scale
 
             # Calculate loss
-            loss = criterion(outputs, targets)
+            loss = criterion(outputs, targets_norm)
             total_loss += loss.item()
             num_batches += 1
             # .cpu() copies from gpu to cpu mem if needed
@@ -322,7 +358,7 @@ def calculate_metrics(y_true, y_pred, target_names):
 def export_model_to_onnx(model, target_path):
     # Save the model
     model.eval()
-    dummy_input = torch.zeros(1, 5)
+    dummy_input = torch.zeros(1, model.input_dim)
     torch.onnx.export(
         model.to(DEVICE),
         dummy_input.to(DEVICE),
@@ -333,26 +369,21 @@ def export_model_to_onnx(model, target_path):
     )
     print(f"Exported model to {target_path}.")
 
-def predict(model, scaler_X, scaler_y, input_data):
+def predict(model, input_data):
     """Make predictions using the trained model."""
     # ensure input_data is a 2D array
     if len(input_data.shape) == 1:
         input_data = input_data.reshape(1, -1)
 
-    # standardize inputs
-    X_scaled = scaler_X.transform(input_data)
-    X_tensor = torch.tensor(X_scaled, dtype=torch.float32)
-    X_tensor.to(DEVICE)
+    # Convert input data to tensor
+    X_tensor = torch.tensor(input_data, dtype=torch.float32).to(DEVICE)
 
-    # make prediction
+    # Make predictions
     model.eval()
     with torch.no_grad():
-        y_pred_scaled = model(X_tensor).cpu().numpy()
+        predictions = model(X_tensor).cpu().numpy()
 
-    # reverse standardization
-    y_pred = scaler_y.inverse_transform(y_pred_scaled)
-
-    return y_pred
+    return predictions
 
 def plot_loss_curves(train_losses, val_losses):
     epochs = range(1, len(train_losses) + 1)
@@ -433,7 +464,7 @@ def objective(trial, table_name, func_tag, target_path, dbs_path=None):
 
     # Split data and prepare dataloaders
     X_train, X_val, _, y_train, y_val, _ = split_data(X, y)
-    train_loader, val_loader, _, _ = prepare_dataloaders(X_train, y_train, X_val, y_val, batch_size)
+    train_loader, val_loader, _, train_dataset = prepare_dataloaders(X_train, y_train, X_val, y_val, batch_size)
 
     # Define model, loss function, and optimizer
     input_dim = X.shape[1]
@@ -442,7 +473,8 @@ def objective(trial, table_name, func_tag, target_path, dbs_path=None):
     model, criterion, optimizer, scheduler = initialize_model(
         input_dim, output_dim, hidden_dims, dropouts, lr, weight_decay, optimizer_name, scheduler_patience=5
     )
-
+    
+    model.set_scalers(train_dataset.scaler_X, train_dataset.scaler_y)
 
     # Train the model
     train_model(model, train_loader, val_loader, criterion, optimizer, scheduler, num_epochs=50, patience=patience)
@@ -502,6 +534,8 @@ def main(table_name,
         hyperparams["optimizer"],
         scheduler_patience=10,
     )
+    
+    model.set_scalers(train_dataset.scaler_X, train_dataset.scaler_y)
 
     # Train the model
     train_losses, val_losses = train_model(
@@ -517,9 +551,7 @@ def main(table_name,
 
     # Evaluate on test set
     test_loss, test_predictions, test_targets = evaluate_model(model, test_loader, criterion)
-    test_predictions_inverted = train_dataset.scaler_y.inverse_transform(test_predictions)
-    test_targets_inverted = train_dataset.scaler_y.inverse_transform(test_targets)
-    test_metrics = calculate_metrics(test_targets_inverted, test_predictions_inverted, OUTPUT_COLS)
+    test_metrics = calculate_metrics(test_targets, test_predictions, OUTPUT_COLS)
 
     # Print test results
     print("=" * 30)
