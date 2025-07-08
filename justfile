@@ -67,7 +67,7 @@ stop:
     
 d:
     @echo "Starting docker service"
-    docker compose up --build --detach
+    WORKER_TYPE=worker docker compose up --scale fake-worker=0 --build --detach
 
 ############################
 # Running Faked HyperFaaS
@@ -181,7 +181,8 @@ run-full-pipeline time="1m" total_runs="3" address="localhost:50050":
     mkdir -p ~/training_data/${timestamp}
     mv ./benchmarks/metrics.db ~/training_data/${timestamp}/metrics.db
     mv ./load-generator/generated_scenarios_*.json ~/training_data/${timestamp}/
-    mv ./benchmarks/plots ~/training_data/${timestamp}/plots
+    mkdir -p ~/training_data/${timestamp}/plots
+    mv ./benchmarks/plots/* ~/training_data/${timestamp}/plots/
 
 allow-reuse-connections:
     # Allow reusing TIME_WAIT sockets for new connections when safe
