@@ -55,8 +55,6 @@ func main() {
 
 	// Memory optimization flags
 	maxConnectionIdle := flag.Duration("max-connection-idle", 15*time.Second, "Maximum time a connection can be idle before being closed")
-	maxConnectionAge := flag.Duration("max-connection-age", 30*time.Second, "Maximum age of a connection before being gracefully closed")
-	maxConnectionAgeGrace := flag.Duration("max-connection-age-grace", 5*time.Second, "Grace period for closing aged connections")
 	keepaliveTime := flag.Duration("keepalive-time", 5*time.Second, "Time between keepalive pings")
 	keepaliveTimeout := flag.Duration("keepalive-timeout", 1*time.Second, "Timeout for keepalive pings")
 	keepaliveMinTime := flag.Duration("keepalive-min-time", 1*time.Second, "Minimum time between keepalive pings")
@@ -73,7 +71,7 @@ func main() {
 
 	// Print configuration
 	logger.Info("Configuration", "address", *address, "logLevel", *logLevel, "logFormat", *logFormat, "logFilePath", *logFilePath, "databaseType", *databaseType, "databaseAddress", *databaseAddress, "workerIDs", workerIDs)
-	logger.Info("Memory Optimization Settings", "maxConnectionIdle", *maxConnectionIdle, "maxConnectionAge", *maxConnectionAge, "maxConnectionAgeGrace", *maxConnectionAgeGrace, "keepaliveTime", *keepaliveTime, "keepaliveTimeout", *keepaliveTimeout, "keepaliveMinTime", *keepaliveMinTime, "enableSharedWriteBuffer", *enableSharedWriteBuffer)
+	logger.Info("Memory Optimization Settings", "maxConnectionIdle", *maxConnectionIdle, "keepaliveTime", *keepaliveTime, "keepaliveTimeout", *keepaliveTimeout, "keepaliveMinTime", *keepaliveMinTime, "enableSharedWriteBuffer", *enableSharedWriteBuffer)
 
 	var ids []state.WorkerID
 	logger.Debug("Setting worker IDs", "workerIDs", workerIDs, "len", len(workerIDs))
@@ -112,11 +110,9 @@ func main() {
 
 	// Configure gRPC server with memory optimizations for handling many connections
 	keepaliveParams := keepalive.ServerParameters{
-		MaxConnectionIdle:     *maxConnectionIdle,
-		MaxConnectionAge:      *maxConnectionAge,
-		MaxConnectionAgeGrace: *maxConnectionAgeGrace,
-		Time:                  *keepaliveTime,
-		Timeout:               *keepaliveTimeout,
+		MaxConnectionIdle: *maxConnectionIdle,
+		Time:              *keepaliveTime,
+		Timeout:           *keepaliveTimeout,
 	}
 
 	keepalivePolicy := keepalive.EnforcementPolicy{
@@ -134,9 +130,8 @@ func main() {
 
 	grpcServer := grpc.NewServer(grpcOptions...)
 	pb.RegisterLeafServer(grpcServer, server)
-	logger.Info("Leaf server started with memory optimizations", "address", listener.Addr(),
+	logger.Info("Leaf server started", "address", listener.Addr(),
 		"maxConnectionIdle", keepaliveParams.MaxConnectionIdle,
-		"maxConnectionAge", keepaliveParams.MaxConnectionAge,
 		"keepaliveTime", keepaliveParams.Time,
 		"sharedWriteBuffer", *enableSharedWriteBuffer)
 	if err := grpcServer.Serve(listener); err != nil {
