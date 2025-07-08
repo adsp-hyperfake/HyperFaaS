@@ -257,9 +257,9 @@ func (s *LeafServer) callWorker(ctx context.Context, workerID state.WorkerID, fu
 	}
 
 	callMetadata := &CallMetadata{
-		CallQueuedTimestamp:    trailer.Get("callQueuedTimestamp")[0],
-		GotResponseTimestamp:   trailer.Get("gotResponseTimestamp")[0],
-		FunctionProcessingTime: trailer.Get("functionProcessingTime")[0],
+		CallQueuedTimestamp:    getFirstValueOrDefault(trailer.Get("callQueuedTimestamp"), ""),
+		GotResponseTimestamp:   getFirstValueOrDefault(trailer.Get("gotResponseTimestamp"), ""),
+		FunctionProcessingTime: getFirstValueOrDefault(trailer.Get("functionProcessingTime"), ""),
 		InstanceID:             resp.InstanceId.Id,
 	}
 
@@ -357,4 +357,11 @@ func (pm *PoolManager) Cleanup() {
 		delete(pm.pools, workerID)
 		log.Printf("[PoolManager] Cleaned up connection pool for worker %s", workerID)
 	}
+}
+
+func getFirstValueOrDefault(values []string, defaultValue string) string {
+	if len(values) > 0 {
+		return values[0]
+	}
+	return defaultValue
 }
