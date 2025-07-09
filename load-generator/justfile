@@ -3,7 +3,7 @@ default:
 
 # Get a random picture from picsum.photos, you need it to run the sequential workloads.
 get-pic:
-	wget https://picsum.photos/200/300
+	wget https://picsum.photos/200/300 -O pic.jpg
 	# Its more efficient than getting many different pictures inside the script, or placing one in the setup context, as it consumes too much memory.
 export:
 	uv run ../benchmarks/import.py --csv test_results.csv --db ../benchmarks/metrics.db
