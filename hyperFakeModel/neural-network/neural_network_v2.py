@@ -16,6 +16,7 @@ from torch.utils.data import Dataset, DataLoader
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import optuna
+from optuna.samplers import TPESampler
 
 ###########
 ### WIP ###
@@ -667,8 +668,9 @@ def main_optuna(trials=20, jobs=5):
         )
         study_db_path = os.path.join(CURR_DIR, f"{identifier}.db")
         study_db_uri = f"sqlite:///{study_db_path}"
+        sampler = TPESampler(seed=42)
         study = optuna.create_study(
-            direction="minimize", study_name=identifier, storage=study_db_uri
+            direction="minimize", study_name=identifier, storage=study_db_uri, sampler=sampler
         )
         study.optimize(wrapped_objective, n_trials=trials, n_jobs=jobs)
 
