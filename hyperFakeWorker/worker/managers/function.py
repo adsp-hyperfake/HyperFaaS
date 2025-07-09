@@ -18,13 +18,11 @@ class FunctionManager():
 
     @property
     def total_cpu_usage(self) -> float:
-        with self.function_lock:
-            return sum([func.cpu for func in self.instanceId_to_instance_map.values()], 0)
+        return sum([func.cpu for func in self.instanceId_to_instance_map.values()], 0)
     
     @property
     def total_ram_usage(self) -> int:
-        with self.function_lock:
-            return sum([func.ram for func in self.instanceId_to_instance_map.values()], 0)
+        return sum([func.ram for func in self.instanceId_to_instance_map.values()], 0)
 
     def get_num_recently_active_functions(self, function_id: FunctionIdStr) -> int:
         return len([e for e in self.functionId_to_instances_map.get(function_id) if e.was_recently_active])
