@@ -177,4 +177,43 @@ class Plotter:
         print(summary)
         print(f"\nTotal expected requests across all functions: {df['expected_rps'].sum():.0f}")
     
+    def _save_or_show(self, filename: str):
+        """Helper to either display or save the current matplotlib figure respecting class options."""
+        if self.show:
+            plt.show()
+        if self.save:
+            os.makedirs(self.save_path, exist_ok=True)
+            plt.savefig(os.path.join(self.save_path, f"{self.prefix}{filename}.png"))
+        plt.close()
+
+    def plot_latency_rps_comparison(self, df_original: pd.DataFrame, df_model: pd.DataFrame):
+        """Overlay latency CDF and per-second throughput for original vs model worker results."""
+
+        df = pd.concat([df_original, df_model], ignore_index=True, sort=False)
+        if "worker_type" not in df:
+            raise ValueError("Input dataframes must contain a 'worker_type' column. Use Data.load_metrics_labeled().")
+
+        # -------------------- Latency CDF --------------------
+        plt.figure(figsize=(15, 6))
+        latency_df = df[df["grpc_req_duration"].notna()].copy()
+        latency_df["grpc_req_duration"] = latency_df["grpc_req_duration"].astype(float)
+        sns.ecdfplot(data=latency_df, x="grpc_req_duration", hue="worker_type")
+        plt.xlabel("End-to-end latency (ms)")
+        plt.ylabel("ECDF")
+        plt.title("Latency distribution – original vs model worker")
+        self._save_or_show("latency_comparison")
+
+        # -------------------- Requests per second -------------
+        # Use only successful calls to count throughput
+        rps_df = latency_df.copy()
+        rps_df["second"] = rps_df["timestamp"].dt.floor("s")
+        rps_df = (
+            rps_df.groupby(["worker_type", "second"]).size().reset_index(name="rps")
+        )
+        plt.figure(figsize=(15, 6))
+        sns.lineplot(data=rps_df, x="second", y="rps", hue="worker_type")
+        plt.ylabel("Requests / s")
+        plt.title("Throughput over time – original vs model worker")
+        self._save_or_show("rps_comparison")
+    
     

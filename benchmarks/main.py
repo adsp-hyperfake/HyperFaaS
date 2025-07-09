@@ -87,6 +87,7 @@ def main():
                         help='Path to SQLite database (default: metrics.db)')
     parser.add_argument('--scenarios-path', 
                         help='Path to k6 scenarios JSON file (optional)')
+    parser.add_argument('--db-path-model', dest='db_path_model', help='Path to SQLite database of the model worker run (optional)')
     
     # Analysis options
     parser.add_argument('--analysis', action='store_true',
@@ -116,6 +117,17 @@ def main():
             scenarios_df = d.load_k6_scenarios(args.scenarios_path)
             plotter.plot_expected_rps(scenarios_df, args.scenarios_path)
     
+    if args.db_path_model:
+        d = Data()
+        df_orig = d.load_metrics_labeled(args.db_path, label='original')
+        df_model = d.load_metrics_labeled(args.db_path_model, label='model')
+        plotter = Plotter(show=args.show, save_path=args.plot_save_path, prefix=args.prefix)
+        plotter.plot_latency_rps_comparison(df_orig, df_model)
+        if args.plot:
+            plotter.plot_throughput_leaf_node(df_orig)
+            plotter.plot_throughput_leaf_node(df_model)
+        return
+
     # Run plotting if requested
     if args.plot:
         if d.metrics is None:
