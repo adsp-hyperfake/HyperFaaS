@@ -535,7 +535,7 @@ def objective(trial, X=None, y=None, dbs_path=None):
         criterion,
         optimizer,
         scheduler,
-        num_epochs=15,
+        num_epochs=50,
         patience=patience,
     )
     val_loss, _, _ = evaluate_model(model, val_loader, criterion)
@@ -605,7 +605,7 @@ def main(
         criterion,
         optimizer,
         scheduler,
-        num_epochs=15,
+        num_epochs=50,
         patience=hyperparams["patience"],
     )
 
