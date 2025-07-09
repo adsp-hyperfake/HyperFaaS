@@ -1,4 +1,3 @@
-import datetime
 from pathlib import Path
 import random
 from hashlib import sha256
@@ -12,7 +11,7 @@ from .names import adjectives, names
 from ..api.controller.controller_pb2 import StatusUpdate, Event, Status
 from ..api.common.common_pb2 import InstanceID, FunctionID
 from ..log import logger
-from ..utils.time import get_timestamp
+from ..utils.time import get_timestamp, NANOSECONDS
 from ..models.input import FunctionModelInput
 from ..models.function import FunctionModelInferer
 from .image import FunctionImage
@@ -23,7 +22,7 @@ class Function(AbstractFunction):
         self.function_manager: FunctionManager = function_manager
         self.status_manager: StatusManager = status_manager
 
-        self.created_at = int(datetime.datetime.now().timestamp())
+        self.created_at = time.time_ns()
         self.last_worked_at = 0
 
         self.work_lock: threading.RLock = threading.RLock()
@@ -42,7 +41,7 @@ class Function(AbstractFunction):
 
     @property
     def was_recently_active(self):
-        return self.time_since_last_work <= 1.0 or self.is_active
+        return self.time_since_last_work <= 8 * NANOSECONDS # or self.is_active
 
     @property
     def is_active(self):
@@ -54,12 +53,12 @@ class Function(AbstractFunction):
 
     @property
     def uptime(self):
-        current_time = int(datetime.datetime.now().timestamp())
+        current_time = time.time_ns()
         return current_time - self.created_at
     
     @property
     def time_since_last_work(self):
-        current_time = int(datetime.datetime.now().timestamp())
+        current_time = time.time_ns()
         return current_time - self.last_worked_at
     
     def coldstart(self):
@@ -91,7 +90,7 @@ class Function(AbstractFunction):
 
     def work(self, body_size: int, bytes: int):
         with self.work_lock:
-            self.last_worked_at = int(datetime.datetime.now().timestamp())
+            self.last_worked_at = time.time_ns()
             logger.debug(f"Executing function {self.function_id} - {self.instance_id}")
             if self.is_cold:
                 self.coldstart()
@@ -105,9 +104,10 @@ class Function(AbstractFunction):
             )
             self.cpu = results.cpu_usage
             self.ram = results.ram_usage
-            time.sleep(results.function_runtime)
+            self.last_worked_at = time.time_ns() + results.function_runtime # Write estimated time
+            time.sleep(results.function_runtime / 1_000_000_000)
             timeout = False
-            self.last_worked_at = int(datetime.datetime.now().timestamp())
+            self.last_worked_at = time.time_ns() # Set correct time in case of simulated errors
             if timeout:
                 self.timeout()
                 return None, results.function_runtime
