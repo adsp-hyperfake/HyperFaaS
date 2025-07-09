@@ -56,25 +56,27 @@ class ControllerServicer(controller_pb2_grpc.ControllerServicer):
     
     def Call(self, request: CallRequest, context: grpc.ServicerContext):
         logger.debug(f"Got Call for function instance {request.instance_id.id} | {request.function_id.id}")
+        assert(request.instance_id.id == request.function_id.id)
 
         initial_trailers = context.trailing_metadata()
         initial_trailers_count = 0 if (initial_trailers is None) else len(context.trailing_metadata())
 
-        with self._scheduler.schedule_call(request.function_id.id, 6) as func:
+        with self._scheduler.schedule_call(request.function_id.id, 9) as func:
             # If scheduling failed    
             try:
                 if func is None:
                     raise SchedulingException("Failed to schedule call...")
                 
                 call_queued_timestamp = get_timestamp().ToNanoseconds()
-                response, runtime = func.work(
+                
+                response_data, runtime = func.work(
                     len(request.SerializeToString()), # Body size
                     10 # number of return bytes
                 )
 
                 call_response_timestamp = get_timestamp().ToNanoseconds()
 
-                if response: # Got a response
+                if response_data: # Got a response
                     self._status_manager.send_status_update(
                         StatusUpdate(
                             instance_id=InstanceID(id=func.instance_id),
@@ -94,9 +96,10 @@ class ControllerServicer(controller_pb2_grpc.ControllerServicer):
 
                 response = CallResponse(
                     request_id=request.request_id,
-                    data=response,
-                    instance_id=InstanceID(id=func.instance_id)
+                    instance_id=InstanceID(id=func.instance_id),
+                    data=response_data
                 )
+                
                 context.set_trailing_metadata(
                     (
                         ("gotResponseTimestamp".lower(), str(call_response_timestamp)),
@@ -111,7 +114,8 @@ class ControllerServicer(controller_pb2_grpc.ControllerServicer):
 
                 response = CallResponse(
                     request_id=request.request_id,
-                    error=Error(message="Unable to schedule function call!")
+                    instance_id=request.instance_id,
+                    error = Error(message="Unable to schedule function call!")
                 )
             except Exception as e:
                 logger.error("Encountered error!")
@@ -119,13 +123,14 @@ class ControllerServicer(controller_pb2_grpc.ControllerServicer):
 
                 response = CallResponse(
                     request_id=request.request_id,
-                    error=Error(message="Encountered Unexpected error when executing function call!")
-                )   
+                    instance_id=request.instance_id,
+                    error = Error(message="Encountered Unexpected error when executing function call!")
+                )
             finally:
                 current_trailers = context.trailing_metadata()
                 current_trailers_count = 0 if (current_trailers is None) else len(context.trailing_metadata())
                 if current_trailers_count == initial_trailers_count:
-                    logger.error("The required grpc trailers are not set, setting dummy trailers...")
+                    logger.debug("The required grpc trailers are not set, setting dummy trailers...")
                     context.set_trailing_metadata(
                         (
                             ("gotResponseTimestamp".lower(), str(0)),

@@ -30,11 +30,18 @@ class FunctionManager():
         return len([e for e in self.functionId_to_instances_map.get(function_id) if e.was_recently_active])
 
     @property
-    def num_recently_active_functions(self) -> dict[FunctionIdStr, int]:
+    def num_recently_active_functions(self) -> int:
         return len([e for e in self.instanceId_to_instance_map.values() if e.was_recently_active])
+
+    def get_num_inactive_functions(self, function_id: FunctionIdStr) -> int:
+        return self.get_num_function_instances(function_id) - self.get_num_active_functions(function_id)
 
     def get_num_active_functions(self, function_id: FunctionIdStr) -> int:
         return len([e for e in self.functionId_to_instances_map.get(function_id) if e.is_active])
+
+    @property
+    def num_inactive_functions(self) -> int:
+        return self.num_functions - self.num_active_functions
 
     @property
     def num_active_functions(self) -> int:
