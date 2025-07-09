@@ -28,9 +28,7 @@ export function thumbnailerFunction(setupData) {
       plaintext: true
     });
   } */
-    client.connect(setupData.address, {
-      plaintext: true
-    });
+
   // Create input data structure with random dimensions
   const width = getRandomInt(50, 200);  // Random width between 50 and 200
   const height = getRandomInt(50, 200); // Random height between 50 and 200
@@ -43,6 +41,10 @@ export function thumbnailerFunction(setupData) {
 
   // Convert to JSON string and then to base64
   const data = encoding.b64encode(JSON.stringify(inputData));
+
+  client.connect(setupData.address, {
+    plaintext: true
+  });
 
   const response = client.invoke('leaf.Leaf/ScheduleCall', {
     functionID: { id: thumbnailerFunctionId },

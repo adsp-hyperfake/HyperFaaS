@@ -43,7 +43,7 @@ export function setup() {
 
   // Create Echo function
   const echoCreateResponse = client.invoke('leaf.Leaf/CreateFunction', {
-    image_tag: { tag: "hyperfaas-echo-json:latest" },
+    image_tag: { tag: "hyperfaas-echo:latest" },
     config: {
       memory: 256 * 1024 * 1024, // 256MB
       cpu: {

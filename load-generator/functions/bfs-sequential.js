@@ -30,9 +30,6 @@ export function bfsFunction(setupData) {
       plaintext: true
     });
   } */
-  client.connect(setupData.address, {
-    plaintext: true
-  });
   
   const size = 100;
 
@@ -45,6 +42,10 @@ export function bfsFunction(setupData) {
 
   // Convert to JSON string and then to base64
   const data = encoding.b64encode(JSON.stringify(inputData));
+
+  client.connect(setupData.address, {
+    plaintext: true
+  });
 
   const response = client.invoke('leaf.Leaf/ScheduleCall', {
     functionID: { id: bfsFunctionId },

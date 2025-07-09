@@ -21,6 +21,7 @@ import (
 	"github.com/golang-cz/devslog"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/keepalive"
 )
 
 type workerIDs []string
@@ -51,6 +52,14 @@ func main() {
 	panicBackoff := flag.Duration("panic-backoff", time.Millisecond*50, "The starting backoff time for the panic mode")
 	panicBackoffIncrease := flag.Duration("panic-backoff-increase", time.Millisecond*50, "The backoff increase for the panic mode")
 	panicMaxBackoff := flag.Duration("panic-max-backoff", time.Second*1, "The maximum backoff for the panic mode")
+
+	// grpcServer config
+	maxConnectionIdle := flag.Duration("max-connection-idle", 15*time.Second, "Maximum time a connection can be idle before being closed")
+	keepaliveTime := flag.Duration("keepalive-time", 5*time.Second, "Time between keepalive pings")
+	keepaliveTimeout := flag.Duration("keepalive-timeout", 1*time.Second, "Timeout for keepalive pings")
+	keepaliveMinTime := flag.Duration("keepalive-min-time", 1*time.Second, "Minimum time between keepalive pings")
+	enableSharedWriteBuffer := flag.Bool("enable-shared-write-buffer", true, "Enable shared write buffer for memory efficiency")
+
 	flag.Var(&workerIDs, "worker-ids", "The IDs of the workers to manage")
 	flag.Parse()
 
@@ -62,6 +71,7 @@ func main() {
 
 	// Print configuration
 	logger.Info("Configuration", "address", *address, "logLevel", *logLevel, "logFormat", *logFormat, "logFilePath", *logFilePath, "databaseType", *databaseType, "databaseAddress", *databaseAddress, "workerIDs", workerIDs)
+	logger.Info("Memory Optimization Settings", "maxConnectionIdle", *maxConnectionIdle, "keepaliveTime", *keepaliveTime, "keepaliveTimeout", *keepaliveTimeout, "keepaliveMinTime", *keepaliveMinTime, "enableSharedWriteBuffer", *enableSharedWriteBuffer)
 
 	var ids []state.WorkerID
 	logger.Debug("Setting worker IDs", "workerIDs", workerIDs, "len", len(workerIDs))
@@ -98,9 +108,32 @@ func main() {
 		os.Exit(1)
 	}
 
-	grpcServer := grpc.NewServer()
+	// Configure gRPC server with memory optimizations for handling many connections
+	keepaliveParams := keepalive.ServerParameters{
+		MaxConnectionIdle: *maxConnectionIdle,
+		Time:              *keepaliveTime,
+		Timeout:           *keepaliveTimeout,
+	}
+
+	keepalivePolicy := keepalive.EnforcementPolicy{
+		MinTime:             *keepaliveMinTime,
+		PermitWithoutStream: true, // Allow pings even when no streams are active
+	}
+
+	var grpcOptions []grpc.ServerOption
+	grpcOptions = append(grpcOptions, grpc.KeepaliveParams(keepaliveParams))
+	grpcOptions = append(grpcOptions, grpc.KeepaliveEnforcementPolicy(keepalivePolicy))
+
+	if *enableSharedWriteBuffer {
+		grpcOptions = append(grpcOptions, grpc.SharedWriteBuffer(true)) // Enable shared write buffer for better memory efficiency, should help with memory usage given the shtty load generator creating so many connections
+	}
+
+	grpcServer := grpc.NewServer(grpcOptions...)
 	pb.RegisterLeafServer(grpcServer, server)
-	logger.Info("Leaf server started", "address", listener.Addr())
+	logger.Info("Leaf server started", "address", listener.Addr(),
+		"maxConnectionIdle", keepaliveParams.MaxConnectionIdle,
+		"keepaliveTime", keepaliveParams.Time,
+		"sharedWriteBuffer", *enableSharedWriteBuffer)
 	if err := grpcServer.Serve(listener); err != nil {
 		logger.Error("failed to serve", "error", err)
 		os.Exit(1)
