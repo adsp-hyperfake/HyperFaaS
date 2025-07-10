@@ -6,6 +6,8 @@ class WorkerConfig:
     address: str
     database_type: str
     runtime: str
+    max_workers: int
+    max_rpcs: int
     timeout: int
     auto_remove: bool
     log_level: str
@@ -14,4 +16,4 @@ class WorkerConfig:
     containerized: bool
     update_buffer_size: int
     db_address: str
-    models: list[Path]
+    models: dict[str, Path]

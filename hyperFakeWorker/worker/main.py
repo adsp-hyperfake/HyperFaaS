@@ -14,16 +14,18 @@ add_proto_definitions()
 @click.option('--address', default='', help='Worker address.')
 @click.option('--database-type', default='http', help='Type of the database.')
 @click.option('--runtime', default='docker', help='Container runtime type.')
+@click.option('-w', '--workers', default=32, type=int)
+@click.option('--max-rpcs', 'maxrpcs', default=256, type=int)
 @click.option('--timeout', default=20, type=int, help='Timeout in seconds before leafnode listeners are removed from status stream updates.')
 @click.option('--auto-remove', is_flag=True, help='Auto remove containers.')
 @click.option('--log-level', default='info', help='Log level (debug, info, warn, error)')
 @click.option('--log-format', default='text', help='Log format (json or text)')
 @click.option('--log-file', default=None, help='Log file path (defaults to stdout)')
 @click.option('--containerized', is_flag=True, help='Use socket to connect to Docker.')
-@click.option("-m", "--model", "model", multiple=True, default=[], type=click.Path(resolve_path=True, path_type=Path, dir_okay=False, exists=True))
+@click.option("-m", "--model", "model", multiple=True, nargs=2, default=[], help='Add a model: <model_path> <image_name>')
 @click.option('--update-buffer-size', default=None, type=int, help='Update buffer size.')  
 @click.pass_context
-def main(ctx, address, database_type, runtime, timeout, auto_remove, log_level, log_format, log_file, containerized, update_buffer_size, model):
+def main(ctx, address, database_type, runtime, workers, maxrpcs, timeout, auto_remove, log_level, log_format, log_file, containerized, update_buffer_size, model):
     setup_logger(log_level, log_file)
 
     db_address = "localhost:8999"
@@ -34,12 +36,21 @@ def main(ctx, address, database_type, runtime, timeout, auto_remove, log_level, 
         # If maxsize is <= 0, the queue size is infinite.
         update_buffer_size = -1
 
+    models_dict = {}
+    for model_path_str, image_name in model:
+        model_path = Path(model_path_str)
+        if not model_path.exists():
+            raise click.BadParameter(f"Model file does not exist: {model_path}")
+        models_dict[image_name] = model_path
+
     # Pass context to other commands
     ctx.obj = WorkerConfig(
         # General
         address=address or "[::]:50051",
         database_type=database_type or "http",
         timeout=timeout,  # not used
+        max_workers=workers,
+        max_rpcs=maxrpcs,
 
         # Runtime
         runtime=runtime,  # not used
@@ -57,7 +68,7 @@ def main(ctx, address, database_type, runtime, timeout, auto_remove, log_level, 
         db_address=db_address,
 
         # Models
-        models=model
+        models=models_dict
     )
 
 @main.command()
@@ -73,7 +84,7 @@ def client():
     from .log import logger
     import grpc
     from .api.controller.controller_pb2_grpc import ControllerStub
-    from .api.controller.controller_pb2 import StateRequest, StateResponse
+    from .api.controller.controller_pb2 import InstanceStateRequest, InstanceState
     from .api.common.common_pb2 import FunctionID, InstanceID, CallRequest, CallResponse
     channel = grpc.insecure_channel("localhost:50051")
     stub = ControllerStub(channel)

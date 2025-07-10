@@ -1,7 +1,9 @@
 import grpc
-from traceback import print_exc
+from traceback import format_exc
 from time import sleep
 from pathlib import Path
+
+from ..exceptions import SchedulingException
 
 from ..config import WorkerConfig
 
@@ -12,59 +14,69 @@ from ..api.controller.controller_pb2 import VirtualizationType, Event, Status
 
 from ..log import logger
 
-from ..function.function import FunctionManager, Function
+from ..managers.function import FunctionManager
+from ..managers.model import ModelManager
+from ..managers.image import ImageManager
+from ..managers.status import StatusManager
+from ..function.function import Function
+from ..function.scheduler import FunctionScheduler
 from ..utils.time import get_timestamp
 
 class ControllerServicer(controller_pb2_grpc.ControllerServicer):
 
     def __init__(self, config: WorkerConfig):
         super().__init__()
-        self._function_manager = FunctionManager(models=config.models, db_address=config.db_address, update_buffer_size=config.update_buffer_size)
+        self._function_manager = FunctionManager()
+        self._status_manager = StatusManager(config.update_buffer_size)
+        self._scheduler = FunctionScheduler(self._function_manager)
+        self._image_manager = ImageManager(db_address=config.db_address)
+        self._model_manager = ModelManager(models=config.models)
 
     def Start(self, request: FunctionID, context: grpc.ServicerContext):
         logger.debug(f"Got Start call for function {request.id}")
-        function_image = self._function_manager.get_image(request.id)
-        model_path = self._function_manager.find_model(request.id, function_image)
-        new_function = Function.create_new(self._function_manager, request.id, function_image, model_path)
-        with self._function_manager.function_lock:
-            self._function_manager.add_function(new_function)
-            self._function_manager.send_status_update(
-                StatusUpdate(
-                    instance_id=InstanceID(id=new_function.instance_id),
-                    event=Event.Value("EVENT_START"),
-                    status=Status.STATUS_SUCCESS,
-                    function_id=FunctionID(id=new_function.function_id),
-                )
+
+        function_image = self._image_manager.get_image(request.id)
+        model_path = self._model_manager.find_model(request.id, function_image)
+        new_function = Function.create_new(self._function_manager, self._status_manager, request.id, function_image, model_path)
+
+        self._function_manager.add_function(new_function)
+
+        self._status_manager.send_status_update(
+            StatusUpdate(
+                instance_id=InstanceID(id=new_function.instance_id),
+                event=Event.Value("EVENT_START"),
+                status=Status.STATUS_SUCCESS,
+                function_id=FunctionID(id=new_function.function_id),
             )
-            logger.info(f"Scheduled instance {new_function.name} - {new_function.instance_id} for function {new_function.image} - {new_function.function_id}")
-            return StartResponse(instance_id=InstanceID(id=new_function.instance_id), instance_ip="127.0.0.1", instance_name=new_function.name)
+        )
+
+        logger.info(f"Scheduled instance {new_function.name} - {new_function.instance_id} for function {new_function.image} - {new_function.function_id}")
+
+        return StartResponse(instance_id=InstanceID(id=new_function.instance_id), instance_ip="127.0.0.1", instance_name=new_function.name)
     
     def Call(self, request: CallRequest, context: grpc.ServicerContext):
         logger.debug(f"Got Call for function instance {request.instance_id.id} | {request.function_id.id}")
-        tries = 0
-        while True:
-            if tries > 5:
-                response = CallResponse(
-                    request_id=request.request_id,
-                    error=Error(message="Unable to schedule function call!")
-                )
-                return response
-            func = self._function_manager.choose_function(request.function_id.id)
-            tries += 1
-            if func is None:
-                sleep(0.1)
-            else:
-                break
-        with func.work_lock:
+
+        initial_trailers = context.trailing_metadata()
+        initial_trailers_count = 0 if (initial_trailers is None) else len(context.trailing_metadata())
+
+        with self._scheduler.schedule_call(request.function_id.id, 9) as func:
+            # If scheduling failed    
             try:
-                queued_ts = get_timestamp().ToNanoseconds()
-                response, runtime = func.work(
+                if func is None:
+                    raise SchedulingException("Failed to schedule call...")
+                
+                call_queued_timestamp = get_timestamp().ToNanoseconds()
+                
+                response_data, runtime = func.work(
                     len(request.SerializeToString()), # Body size
-                    10
+                    10 # number of return bytes
                 )
-                response_ts = get_timestamp().ToNanoseconds()
-                if response:
-                    self._function_manager.send_status_update(
+
+                call_response_timestamp = get_timestamp().ToNanoseconds()
+
+                if response_data: # Got a response
+                    self._status_manager.send_status_update(
                         StatusUpdate(
                             instance_id=InstanceID(id=func.instance_id),
                             event=Event.Value("EVENT_RESPONSE"),
@@ -72,42 +84,65 @@ class ControllerServicer(controller_pb2_grpc.ControllerServicer):
                             function_id=FunctionID(id=func.function_id),
                         )
                     )
-                else:
-                    self._function_manager.send_status_update(
+                else: # Got no response
+                    self._status_manager.send_status_update(
                         StatusUpdate(
                             instance_id=InstanceID(id=func.instance_id),
                             event=Event.Value("EVENT_DOWN"),
                             function_id=FunctionID(id=func.function_id),
                         )
                     )
+
                 response = CallResponse(
                     request_id=request.request_id,
-                    data=response,
-                    instance_id=InstanceID(id=func.instance_id)
+                    instance_id=InstanceID(id=func.instance_id),
+                    data=response_data
                 )
-                logger.debug(f"Returning response {response.__str__()}")
+                
                 context.set_trailing_metadata(
                     (
-                        ("gotResponseTimestamp".lower(), str(response_ts)),
-                        ("callQueuedTimestamp".lower(), str(queued_ts)),
+                        ("gotResponseTimestamp".lower(), str(call_response_timestamp)),
+                        ("callQueuedTimestamp".lower(), str(call_queued_timestamp)),
                         ("functionProcessingTime".lower(), str(runtime))
                     )
                 )
-                
-            except Exception as e:
-                print("Encountered error!")
-                print_exc()
+
+                logger.debug(f"Returning response {response.__str__()}")
+            except SchedulingException:
+                logger.error(f"Failed to schedule call request for function {request.function_id.id}")
+
                 response = CallResponse(
                     request_id=request.request_id,
-                    error=Error(message="Encountered Unexpected error when executing function call!")
+                    instance_id=request.instance_id,
+                    error = Error(message="Unable to schedule function call!")
+                )
+            except Exception as e:
+                logger.error("Encountered error!")
+                logger.error(format_exc())
+
+                response = CallResponse(
+                    request_id=request.request_id,
+                    instance_id=request.instance_id,
+                    error = Error(message="Encountered Unexpected error when executing function call!")
                 )
             finally:
+                current_trailers = context.trailing_metadata()
+                current_trailers_count = 0 if (current_trailers is None) else len(context.trailing_metadata())
+                if current_trailers_count == initial_trailers_count:
+                    logger.debug("The required grpc trailers are not set, setting dummy trailers...")
+                    context.set_trailing_metadata(
+                        (
+                            ("gotResponseTimestamp".lower(), str(0)),
+                            ("callQueuedTimestamp".lower(), str(0)),
+                            ("functionProcessingTime".lower(), str(0))
+                        )
+                    )
                 return response
     
     def Stop(self, request: InstanceID, context: grpc.ServicerContext):
         logger.info(f"Got Stop call for function instance {request.id}")
         func = self._function_manager.remove_function(request.id)
-        self._function_manager.send_status_update(
+        self._status_manager.send_status_update(
             StatusUpdate(
                 instance_id=InstanceID(id=func.instance_id),
                 event=Event.Value("EVENT_STOP"),
@@ -120,7 +155,7 @@ class ControllerServicer(controller_pb2_grpc.ControllerServicer):
     
     def Status(self, request: StatusRequest, context: grpc.ServicerContext):
         # Collect functions...
-        for update in self._function_manager.get_status_updates():
+        for update in self._status_manager.get_status_updates():
             logger.debug(f"Sent Status update:\nFunction: {update.function_id}\nInstance: {update.instance_id}\nEvent: {update.event.__str__()}\nStatus: {update.status.__str__()}\ntime: {update.timestamp.__str__()}")
             yield update
     

@@ -1,0 +1,3 @@
+
+class SchedulingException(RuntimeError):
+    pass

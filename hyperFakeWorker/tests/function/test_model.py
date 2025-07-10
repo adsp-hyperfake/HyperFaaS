@@ -1,7 +1,7 @@
 from pathlib import Path
 import numpy as np
 
-from worker.function.model import FunctionModelInferer, FunctionModelInput, FunctionModelOutput
+from hyperFakeWorker.worker.function.managers.model import FunctionModelInferer, FunctionModelInput, FunctionModelOutput
 
 test_path = Path(__file__).parent
 

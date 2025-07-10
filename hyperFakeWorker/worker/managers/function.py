@@ -1,0 +1,122 @@
+import threading
+from weakref import WeakSet
+
+from ..function import FunctionIdStr, InstanceIdStr
+from ..api.controller.controller_pb2 import StatusUpdate, FunctionState, InstanceState
+from ..api.common.common_pb2 import FunctionID
+from ..log import logger
+from ..function.abstract import AbstractFunction
+
+class FunctionManager():
+
+    def __init__(self):
+        self.function_lock = threading.RLock()
+        # instance_id : Function
+        self.instanceId_to_instance_map: dict[InstanceIdStr, AbstractFunction] = {}
+        # function_id : set[Function]
+        self.functionId_to_instances_map: dict[FunctionIdStr, WeakSet[AbstractFunction]] = {}
+
+    @property
+    def total_cpu_usage(self) -> float:
+        return sum([func.cpu for func in self.instanceId_to_instance_map.values()], 0)
+    
+    @property
+    def total_ram_usage(self) -> int:
+        return sum([func.ram for func in self.instanceId_to_instance_map.values()], 0)
+
+    def get_num_recently_active_functions(self, function_id: FunctionIdStr) -> int:
+        return len([e for e in self.functionId_to_instances_map.get(function_id) if e.was_recently_active])
+
+    @property
+    def num_recently_active_functions(self) -> int:
+        return len([e for e in self.instanceId_to_instance_map.values() if e.was_recently_active])
+
+    def get_num_inactive_functions(self, function_id: FunctionIdStr) -> int:
+        return self.get_num_function_instances(function_id) - self.get_num_active_functions(function_id)
+
+    def get_num_active_functions(self, function_id: FunctionIdStr) -> int:
+        return len([e for e in self.functionId_to_instances_map.get(function_id) if e.is_active])
+
+    @property
+    def num_inactive_functions(self) -> int:
+        return self.num_functions - self.num_active_functions
+
+    @property
+    def num_active_functions(self) -> int:
+        return len([e for e in self.instanceId_to_instance_map.values() if e.is_active])
+    
+    def get_num_function_instances(self, function_id: FunctionIdStr) -> int:
+        return len(self.functionId_to_instances_map.get(function_id))
+
+    @property
+    def num_functions(self) -> int:
+        return len(self.instanceId_to_instance_map.values())
+
+    def add_function(self, function: AbstractFunction):
+        with self.function_lock:
+            # Add to function instance map
+            self.instanceId_to_instance_map[function.instance_id] = function
+
+            # Add to set of all instances of an image
+            if self.functionId_to_instances_map.get(function.function_id) is None:
+                self.functionId_to_instances_map[function.function_id] = WeakSet()
+            self.functionId_to_instances_map[function.function_id].add(function)
+
+    def remove_function(self, instance_id: InstanceIdStr):
+        with self.function_lock:
+            if self.instanceId_to_instance_map.get(instance_id) is None:
+                return
+            function = self.instanceId_to_instance_map[instance_id]
+            self.functionId_to_instances_map[function.function_id].remove(function)
+            return self.instanceId_to_instance_map.pop(instance_id)
+
+    def get_function(self, instance_id: InstanceIdStr):
+        try:
+            return self.instanceId_to_instance_map[instance_id]
+        except KeyError as e:
+            logger.critical(f"Failed to find instance_id {instance_id} in:\n{self.instanceId_to_instance_map.keys()}")
+            raise e
+        
+    def get_state(self) -> list[FunctionState]:
+        with self.function_lock:
+            state = []
+            for function_id in self.functionId_to_instances_map.keys():
+                functions = self.functionId_to_instances_map[function_id]
+                running = []
+                idle = []
+                for func in functions:
+                    instance_state = InstanceState(
+                        instance_id=func.instance_id,
+                        is_active=func.is_active,
+                        time_since_last_work=func.time_since_last_work,
+                        uptime=func.uptime
+                    )
+                    if func.is_active:
+                        running.append(
+                            instance_state
+                        )
+                    else:
+                        idle.append(
+                            instance_state
+                        )
+                if len(idle) <= 0 and len(running) <= 0:
+                    state.append(FunctionState(
+                        function_id=FunctionID(id=function_id),
+                    ))
+                elif len(idle) > 0 and len(running) <= 0:
+                    state.append(FunctionState(
+                        function_id=FunctionID(id=function_id),
+                        idle=idle
+                    ))
+                elif len(idle) > 0 and len(running) > 0:
+                    state.append(FunctionState(
+                        function_id=FunctionID(id=function_id),
+                        running=running,
+                    ))
+                else:
+                    state.append(FunctionState(
+                        function_id=FunctionID(id=function_id),
+                        running=running,
+                        idle=idle
+                    ))
+            return state
