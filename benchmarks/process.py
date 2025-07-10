@@ -264,7 +264,7 @@ class TrainingData:
                 )
                 
                 # Function runtime (convert to nanoseconds)
-                function_runtime = int(row['functionprocessingtime'] * 1e9) if pd.notna(row['functionprocessingtime']) else 0
+                function_runtime = int(row['functionprocessingtime']) if pd.notna(row['functionprocessingtime']) else 0
                 
                 training_record = {
                     'request_id': request_id,
