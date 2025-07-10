@@ -252,11 +252,13 @@ func testSequentialCalls(client pb.LeafClient, functionID *common.FunctionID) {
 			Data:       []byte(""),
 		}
 
-		_, err := client.ScheduleCall(context.Background(), req)
+		ctx, cancel := context.WithTimeout(context.Background(), TIMEOUT)
+		_, err := client.ScheduleCall(ctx, req)
 		if err != nil {
 			log.Fatalf("Failed to schedule sequential call %d: %v", i, err)
 		}
 		fmt.Printf("Successfully got response from sequential call %d\n", i)
+		cancel()
 	}
 }
 

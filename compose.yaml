@@ -27,6 +27,8 @@ services:
     build:
       context: .
       dockerfile: fakeworker.Dockerfile
+    volumes:
+      - ./log/:/root/log/
     ports:
       - "50051:50051"
     networks:
@@ -42,7 +44,7 @@ services:
      "--auto-remove",
      "--log-level", "debug",
      "--log-format", "text",
-     "--log-file", "stdout",
+     "--log-file", "/root/log/fake-worker.log",
      "--containerized",
      "server"]
     healthcheck:

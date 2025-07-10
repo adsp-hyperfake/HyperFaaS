@@ -110,6 +110,5 @@ CMD ["hyperfakeworker", \
      "--auto-remove", \
      "--log-level", "debug", \
      "--log-format", "text", \
-     "--log-file", "stdout", \
 #     "--containerized", \
      "server"]
