@@ -100,9 +100,9 @@ STOPSIGNAL SIGINT
 
 
 CMD ["hyperfakeworker", \
-     "-m", "/app/models/hyperfaas-bfs-json.onnx", \
-     "-m", "/app/models/hyperfaas-echo.onnx", \
-     "-m", "/app/models/hyperfaas-thumbnailer-json.onnx", \
+     "-m", "/app/models/hyperfaas-bfs-json.onnx", "hyperfaas-bfs-json", \
+     "-m", "/app/models/hyperfaas-echo.onnx", "hyperfaas-echo", \
+     "-m", "/app/models/hyperfaas-thumbnailer-json.onnx", "hyperfaas-thumbnailer-json", \
      "--address", "localhost:50051", \
      "--database-type", "http", \
      "--runtime", "docker", \

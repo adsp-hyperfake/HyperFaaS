@@ -16,4 +16,4 @@ class WorkerConfig:
     containerized: bool
     update_buffer_size: int
     db_address: str
-    models: list[Path]
+    models: dict[str, Path]

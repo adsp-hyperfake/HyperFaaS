@@ -22,7 +22,7 @@ add_proto_definitions()
 @click.option('--log-format', default='text', help='Log format (json or text)')
 @click.option('--log-file', default=None, help='Log file path (defaults to stdout)')
 @click.option('--containerized', is_flag=True, help='Use socket to connect to Docker.')
-@click.option("-m", "--model", "model", multiple=True, default=[], type=click.Path(resolve_path=True, path_type=Path, dir_okay=False, exists=True))
+@click.option("-m", "--model", "model", multiple=True, nargs=2, default=[], help='Add a model: <model_path> <image_name>')
 @click.option('--update-buffer-size', default=None, type=int, help='Update buffer size.')  
 @click.pass_context
 def main(ctx, address, database_type, runtime, workers, maxrpcs, timeout, auto_remove, log_level, log_format, log_file, containerized, update_buffer_size, model):
@@ -35,6 +35,13 @@ def main(ctx, address, database_type, runtime, workers, maxrpcs, timeout, auto_r
     if update_buffer_size is None:
         # If maxsize is <= 0, the queue size is infinite.
         update_buffer_size = -1
+
+    models_dict = {}
+    for model_path_str, image_name in model:
+        model_path = Path(model_path_str)
+        if not model_path.exists():
+            raise click.BadParameter(f"Model file does not exist: {model_path}")
+        models_dict[image_name] = model_path
 
     # Pass context to other commands
     ctx.obj = WorkerConfig(
@@ -61,7 +68,7 @@ def main(ctx, address, database_type, runtime, workers, maxrpcs, timeout, auto_r
         db_address=db_address,
 
         # Models
-        models=model
+        models=models_dict
     )
 
 @main.command()
