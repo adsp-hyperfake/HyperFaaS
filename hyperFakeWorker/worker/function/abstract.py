@@ -70,7 +70,7 @@ class AbstractFunction(ABC):
         pass
 
     @abstractmethod
-    def work(self, body_size: int, bytes: int) -> tuple[bytes, float]:
+    def work(self, body_size: int, result_bytes: int) -> tuple[bytes, float]:
         pass
 
     @abstractmethod

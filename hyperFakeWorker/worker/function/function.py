@@ -88,7 +88,7 @@ class Function(AbstractFunction):
     def unlock(self):
         self.work_lock.release()
 
-    def work(self, body_size: int, bytes: int):
+    def work(self, body_size: int, result_bytes: int):
         with self.work_lock:
             self.last_worked_at = time.time_ns()
             logger.debug(f"Executing function {self.function_id} - {self.instance_id}")
@@ -113,7 +113,7 @@ class Function(AbstractFunction):
                 return None, results.function_runtime
             self.cpu = 0
             self.ram = 0
-            return random.randbytes(bytes), results.function_runtime
+            return random.randbytes(result_bytes), results.function_runtime
            
     def __eq__(self, value):
         if not isinstance(value, Function):
