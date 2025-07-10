@@ -56,7 +56,6 @@ class ControllerServicer(controller_pb2_grpc.ControllerServicer):
     
     def Call(self, request: CallRequest, context: grpc.ServicerContext):
         logger.debug(f"Got Call for function instance {request.instance_id.id} | {request.function_id.id}")
-        assert(request.instance_id.id == request.function_id.id)
 
         initial_trailers = context.trailing_metadata()
         initial_trailers_count = 0 if (initial_trailers is None) else len(context.trailing_metadata())
