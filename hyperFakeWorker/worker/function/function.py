@@ -106,9 +106,10 @@ class Function(AbstractFunction):
             self.ram = results.ram_usage
             self.last_worked_at = time.time_ns() + results.function_runtime # Write estimated time
             time.sleep(results.function_runtime / 1_000_000_000)
-            timeout = False
-            self.last_worked_at = time.time_ns() # Set correct time in case of simulated errors
-            if timeout:
+            # TODO either implement a timeout or remove this code
+            # timeout = False
+            # self.last_worked_at = time.time_ns() # Set correct time in case of simulated errors
+            if False: # if timeout:
                 self.timeout()
                 return None, results.function_runtime
             self.cpu = 0
