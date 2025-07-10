@@ -216,4 +216,53 @@ class Plotter:
         plt.title("Throughput over time – original vs model worker")
         self._save_or_show("rps_comparison")
     
-    
+    def plot_latency_ecdf_per_image_comparison(self, df_original: pd.DataFrame, df_model: pd.DataFrame):
+        """
+        Plot ECDF of latency per function image, comparing original vs model worker
+        in small multiples (one panel per image). Worker‐type is encoded as linestyle,
+        image tag as the panel.
+        """
+        import numpy as np
+        import matplotlib.pyplot as plt
+
+        df = pd.concat([df_original, df_model], ignore_index=True, sort=False)
+        if "worker_type" not in df:
+            raise ValueError("DataFrames must include a 'worker_type' column.")
+        df = df[df["grpc_req_duration"].notna()].copy()
+        df["grpc_req_duration"] = df["grpc_req_duration"].astype(float)
+
+        image_tags = sorted(df["image_tag"].unique())
+        linestyles = {"original": "-", "model": "--"}
+
+        n = len(image_tags)
+        fig, axes = plt.subplots(1, n, figsize=(5*n, 4), sharex=True, sharey=True)
+        if n == 1:
+            axes = [axes]
+
+        for ax, tag in zip(axes, image_tags):
+            for wt, ls in linestyles.items():
+                sub = df[(df["image_tag"] == tag) & (df["worker_type"] == wt)]
+                if sub.empty:
+                    continue
+                x = np.sort(sub["grpc_req_duration"].values)
+                y = np.arange(1, len(x)+1) / len(x)
+                ax.step(x, y,
+                        where="post",
+                        color=IMAGE_PALETTE.get(tag, "gray"),
+                        linestyle=ls,
+                        label=wt)
+            ax.set_title(tag, fontsize=12)
+            ax.set_xlabel("Latency (ms)")
+            ax.grid(True, alpha=0.3)
+
+        axes[-1].legend(
+            title="Worker type",
+            loc="lower right",
+            frameon=True
+        )
+
+        fig.suptitle("Latency ECDF per Image – original vs model worker", fontsize=14)
+        fig.tight_layout(rect=[0, 0, 1, 0.95])
+
+        self._save_or_show("latency_ecdf_per_image_comparison")
+        plt.close(fig)

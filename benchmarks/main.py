@@ -123,6 +123,7 @@ def main():
         df_model = d.load_metrics_labeled(args.db_path_model, label='model')
         plotter = Plotter(show=args.show, save_path=args.plot_save_path, prefix=args.prefix)
         plotter.plot_latency_rps_comparison(df_orig, df_model)
+        plotter.plot_latency_ecdf_per_image_comparison(df_orig, df_model)
         if args.plot:
             plotter.plot_throughput_leaf_node(df_orig)
             plotter.plot_throughput_leaf_node(df_model)
