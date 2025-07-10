@@ -3,6 +3,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import json
 import os
+from collections.abc import Mapping
 
 IMAGE_PALETTE = {
     "hyperfaas-bfs-json:latest": "blue",
@@ -186,83 +187,100 @@ class Plotter:
             plt.savefig(os.path.join(self.save_path, f"{self.prefix}{filename}.png"))
         plt.close()
 
-    def plot_latency_rps_comparison(self, df_original: pd.DataFrame, df_model: pd.DataFrame):
-        """Overlay latency CDF and per-second throughput for original vs model worker results."""
+    def plot_latency_rps_comparison(
+        self,
+        runs: Mapping[str, pd.DataFrame]
+    ):
+        """
+        Overlay latency CDF and per‐second throughput for an arbitrary number of runs.
+        `runs` is a dict mapping run_label (e.g. "orig", "model", "v2") → DataFrame.
+        """
+        tagged = []
+        for label, df in runs.items():
+            df2 = df.copy()
+            if "worker_type" in df2:
+                df2["worker_type"] = label
+            else:
+                df2 = df2.rename_axis(None, axis=1)
+                df2["worker_type"] = label
+            tagged.append(df2)
+        df_all = pd.concat(tagged, ignore_index=True, sort=False)
 
-        df = pd.concat([df_original, df_model], ignore_index=True, sort=False)
-        if "worker_type" not in df:
-            raise ValueError("Input dataframes must contain a 'worker_type' column. Use Data.load_metrics_labeled().")
+        df_l = df_all[df_all["grpc_req_duration"].notna()].copy()
+        df_l["grpc_req_duration"] = df_l["grpc_req_duration"].astype(float)
 
-        # -------------------- Latency CDF --------------------
         plt.figure(figsize=(15, 6))
-        latency_df = df[df["grpc_req_duration"].notna()].copy()
-        latency_df["grpc_req_duration"] = latency_df["grpc_req_duration"].astype(float)
-        sns.ecdfplot(data=latency_df, x="grpc_req_duration", hue="worker_type")
+        sns.ecdfplot(
+            data=df_l,
+            x="grpc_req_duration",
+            hue="worker_type",
+            linewidth=2
+        )
         plt.xlabel("End-to-end latency (ms)")
         plt.ylabel("ECDF")
-        plt.title("Latency distribution – original vs model worker")
-        self._save_or_show("latency_comparison")
+        plt.title("Latency distribution – " + ", ".join(runs.keys()))
+        self._save_or_show("latency_comparison_multi")
 
-        # -------------------- Requests per second -------------
-        # Use only successful calls to count throughput
-        rps_df = latency_df.copy()
-        rps_df["second"] = rps_df["timestamp"].dt.floor("s")
-        rps_df = (
-            rps_df.groupby(["worker_type", "second"]).size().reset_index(name="rps")
+        df_rps = (
+            df_l
+            .assign(second=lambda d: d["timestamp"].dt.floor("s"))
+            .groupby(["worker_type", "second"])
+            .size()
+            .reset_index(name="rps")
         )
+
         plt.figure(figsize=(15, 6))
-        sns.lineplot(data=rps_df, x="second", y="rps", hue="worker_type")
-        plt.ylabel("Requests / s")
-        plt.title("Throughput over time – original vs model worker")
-        self._save_or_show("rps_comparison")
-    
-    def plot_latency_ecdf_per_image_comparison(self, df_original: pd.DataFrame, df_model: pd.DataFrame):
-        """
-        Plot ECDF of latency per function image, comparing original vs model worker
-        in small multiples (one panel per image). Worker‐type is encoded as linestyle,
-        image tag as the panel.
-        """
-        import numpy as np
-        import matplotlib.pyplot as plt
-
-        df = pd.concat([df_original, df_model], ignore_index=True, sort=False)
-        if "worker_type" not in df:
-            raise ValueError("DataFrames must include a 'worker_type' column.")
-        df = df[df["grpc_req_duration"].notna()].copy()
-        df["grpc_req_duration"] = df["grpc_req_duration"].astype(float)
-
-        image_tags = sorted(df["image_tag"].unique())
-        linestyles = {"original": "-", "model": "--"}
-
-        n = len(image_tags)
-        fig, axes = plt.subplots(1, n, figsize=(5*n, 4), sharex=True, sharey=True)
-        if n == 1:
-            axes = [axes]
-
-        for ax, tag in zip(axes, image_tags):
-            for wt, ls in linestyles.items():
-                sub = df[(df["image_tag"] == tag) & (df["worker_type"] == wt)]
-                if sub.empty:
-                    continue
-                x = np.sort(sub["grpc_req_duration"].values)
-                y = np.arange(1, len(x)+1) / len(x)
-                ax.step(x, y,
-                        where="post",
-                        color=IMAGE_PALETTE.get(tag, "gray"),
-                        linestyle=ls,
-                        label=wt)
-            ax.set_title(tag, fontsize=12)
-            ax.set_xlabel("Latency (ms)")
-            ax.grid(True, alpha=0.3)
-
-        axes[-1].legend(
-            title="Worker type",
-            loc="lower right",
-            frameon=True
+        sns.lineplot(
+            data=df_rps,
+            x="second",
+            y="rps",
+            hue="worker_type",
+            linewidth=2
         )
+        plt.ylabel("Requests / s")
+        plt.title("Throughput over time – " + ", ".join(runs.keys()))
+        self._save_or_show("rps_comparison_multi")
 
-        fig.suptitle("Latency ECDF per Image – original vs model worker", fontsize=14)
-        fig.tight_layout(rect=[0, 0, 1, 0.95])
+    def plot_latency_ecdf_per_image(
+        self,
+        runs: Mapping[str, pd.DataFrame],
+        cols: int = 3
+    ):
+        """
+        Small‐multiples ECDF per image_tag, comparing N runs.
+        `cols` controls how many panels per row.
+        """
+        tagged = []
+        for label, df in runs.items():
+            df2 = df.copy()
+            df2["run"] = label
+            tagged.append(df2)
+        df_all = pd.concat(tagged, ignore_index=True, sort=False)
 
-        self._save_or_show("latency_ecdf_per_image_comparison")
-        plt.close(fig)
+        df_all = df_all[df_all["grpc_req_duration"].notna()].copy()
+        df_all["grpc_req_duration"] = df_all["grpc_req_duration"].astype(float)
+
+        g = sns.FacetGrid(
+            df_all,
+            col="image_tag",
+            hue="run",
+            col_wrap=cols,
+            sharex=True,
+            sharey=True,
+            height=4,
+            aspect=1.2
+        )
+        g.map(sns.ecdfplot, "grpc_req_duration")
+        g.add_legend(title="Run")
+        g.set_axis_labels("Latency (ms)", "ECDF")
+        g.set_titles("{col_name}")
+        plt.subplots_adjust(top=0.88)
+        g.fig.suptitle("Latency ECDF per Image – " + ", ".join(runs.keys()), fontsize=14)
+
+        if self.show:
+            plt.show()
+        if self.save:
+            os.makedirs(self.save_path, exist_ok=True)
+            out = os.path.join(self.save_path, f"{self.prefix}latency_ecdf_per_image_multi.png")
+            g.fig.savefig(out)
+        plt.close(g.fig)

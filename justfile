@@ -205,8 +205,7 @@ create-fake-data-plot:
 
 plot-comparison:
     cd benchmarks/ && uv run main.py --plot \
-    --db-path metrics_original.db \
-    --db-path-model metrics_model.db \
+    --db-paths metrics_original.db metrics_model.db \
     --plot-save-path ./plots/ \
     --prefix comparison_
 
