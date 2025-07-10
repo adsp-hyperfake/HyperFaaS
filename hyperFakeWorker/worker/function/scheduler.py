@@ -7,6 +7,9 @@ from time import sleep
 
 from ..log import logger
 
+class FunctionUnknownToSchedulerException(KeyError):
+    pass
+
 class FunctionScheduler():
 
     def __init__(self, function_manager: FunctionManager):
@@ -16,7 +19,9 @@ class FunctionScheduler():
     def schedule_call(self, function_id: FunctionIdStr, tries: int):
         scheduled_instance: Function = None
 
-        running_instances: set[Function] = self._function_manager.functionId_to_instances_map[function_id]
+        running_instances: set[Function] = self._function_manager.functionId_to_instances_map.get(function_id)
+        if running_instances is None:
+            raise FunctionUnknownToSchedulerException(f"The requested function {function_id} is unknown!")
         if len(running_instances) < 1:
             logger.critical(f"Insufficient instances for function {function_id} are scheduled!")
         for i in range(tries + 1):
