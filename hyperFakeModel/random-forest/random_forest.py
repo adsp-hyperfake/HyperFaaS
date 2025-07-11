@@ -9,6 +9,9 @@ from skl2onnx import convert_sklearn
 from skl2onnx.common.data_types import FloatTensorType
 import onnx
 from datetime import datetime
+import argparse
+from tqdm import tqdm
+from tqdm_joblib import tqdm_joblib
 
 # Feature and target column definitions
 INPUT_COLS = [
@@ -81,7 +84,8 @@ def export_model_to_onnx(model, input_dim, target_path):
     onnx_model = convert_sklearn(
         model,
         initial_types=initial_types,
-        final_types=final_types
+        final_types=final_types,
+        target_opset=15,
     )
     metadata = {
         "features": ",".join(INPUT_COLS),
@@ -105,8 +109,9 @@ def main(table_name, func_tag, target_path, db_path):
 
     # Train model
     input_dim = X_train.shape[1]
-    model = RandomForestRegressor(n_estimators=100, random_state=42)
-    model.fit(X_train, y_train)
+    model = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)
+    with tqdm_joblib(tqdm(total=model.n_estimators, desc="Training RF")):
+        model.fit(X_train, y_train)
 
     # Evaluate on validation and test sets
     metrics_val = compute_metrics(model, X_val, y_val)
@@ -123,22 +128,10 @@ def main(table_name, func_tag, target_path, db_path):
 
 
 if __name__ == "__main__":
-    # TODO: add a command line interface to select the function tag and the target path
-    # TODO: add a command line interface to select the database path
-    # TODO: add a command line interface to select the table name
-    # TODO: add a command line interface to select the number of estimators
-    # TODO: add a command line interface to select the random state
-    # TODO: add a command line interface to select the test size
-    # TODO: add a command line interface to select the validation size
-    """
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--db-path", required=True)
-    parser.add_argument("--table", default="training_data")
-    parser.add_argument("--tag", required=True)
-    parser.add_argument("--out", required=True)
+    parser = argparse.ArgumentParser(description="Train RandomForest models and export them to ONNX.")
+    parser.add_argument("--db-path", help="Path to the SQLite metrics database.")
+    parser.add_argument("--table", default="training_data", help="Name of the table with training data.")
     args = parser.parse_args()
-    """
 
     func_tags = [
         "hyperfaas-bfs-json:latest",
@@ -146,10 +139,10 @@ if __name__ == "__main__":
         "hyperfaas-echo:latest",
     ]
     short_names = ["bfs", "thumbnailer", "echo"]
-    db_name = "metrics.db"
     curr_dir = os.path.dirname(os.path.abspath(__file__))
-    db_path = os.path.join(curr_dir, "..", "..", "benchmarks", db_name)
-    table_name = "training_data"
+    default_db_path = os.path.join(curr_dir, "..", "..", "benchmarks", "metrics.db")
+    db_path = os.path.abspath(args.db_path) if args.db_path else default_db_path
+    table_name = args.table
 
     for func_tag, short_name in zip(func_tags, short_names):
         target_path = os.path.join(curr_dir, f"{short_name}.onnx")
