@@ -73,17 +73,22 @@ d:
 # generates proto, builds binary, builds docker go and runs the workser
 dev: build start
 
-run-local-database:
+build-local:
+    go build -o bin/hyperfaas-database cmd/database/main.go
+    go build -o bin/hyperfaas-worker cmd/worker/main.go
+    go build -o bin/hyperfaas-leaf cmd/leaf/main.go
+
+run-local-database: build-local
     @echo "Running local database"
-    go run cmd/database/main.go --address=0.0.0.0:8999
+    ./bin/hyperfaas-database --address=0.0.0.0:8999
 
-run-local-worker:
+run-local-worker: build-local
     @echo "Running local worker"
-    go run cmd/worker/main.go --address=localhost:50051 --runtime=docker --log-level=info --log-format=dev --auto-remove=true --containerized=false --caller-server-address=127.0.0.1:50052 --database-type=http
+    ./bin/hyperfaas-worker --address=localhost:50051 --runtime=docker --log-level=info --log-format=dev --auto-remove=true --containerized=false --caller-server-address=127.0.0.1:50052 --database-type=http
 
-run-local-leaf:
+run-local-leaf: build-local
     @echo "Running local leaf"
-    go run cmd/leaf/main.go --address=localhost:50050 --log-level=debug --log-format=text --worker-ids=127.0.0.1:50051 --database-address=http://localhost:8999
+    ./bin/hyperfaas-leaf --address=localhost:50050 --log-level=debug --log-format=text --worker-ids=127.0.0.1:50051 --database-address=http://localhost:8999
 
 
 ############################

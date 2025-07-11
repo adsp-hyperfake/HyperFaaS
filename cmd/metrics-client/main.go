@@ -5,8 +5,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"io"
 	"log"
+	"os/exec"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/3s-rg-codes/HyperFaaS/proto/controller"
@@ -14,6 +18,7 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/shirou/gopsutil/v4/process"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -27,6 +32,31 @@ const (
 var (
 	dbPath = flag.String("db-path", DB_PATH, "Path to SQLite database file")
 )
+
+type Stats struct {
+	InstanceID string
+	FunctionID string
+	ImageTag   string
+	Timestamp  int64
+
+	CPUUsageTotal   uint64
+	CPUUsagePercent float64
+
+	MemoryUsage   float64
+	MemoryLimit   float64
+	MemoryPercent float64
+
+	BlockRead  uint64
+	BlockWrite uint64
+
+	NetworkRx float64
+	NetworkTx float64
+}
+
+type Process struct {
+	PID  int
+	Name string
+}
 
 func initDB(db *sql.DB) error {
 	_, err := db.Exec(`
@@ -113,6 +143,11 @@ func main() {
 
 	eg.Go(func() error {
 		collectMetrics(ctx, db)
+		return nil
+	})
+
+	eg.Go(func() error {
+		collectMetricsNative(ctx, db)
 		return nil
 	})
 
@@ -219,6 +254,139 @@ func handleStatusStream(ctx context.Context, db *sql.DB) error {
 	}
 }
 
+// collectMetricsNative retrieves stats for database, leaf and worker processes
+func collectMetricsNative(ctx context.Context, db *sql.DB) {
+	// Get all hyperfaas processes
+	procs, err := findByProcessName()
+	if err != nil {
+		log.Printf("Failed to find processes: %v", err)
+		return
+	}
+	if len(procs) == 0 {
+		log.Println("No hyperfaas processes found. Assumining dockerized hyperfaas.")
+		return
+	}
+
+	ticker := time.NewTicker(STATS_INTERVAL)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			// Get stats for each process
+			for _, proc := range procs {
+				go func(pid int) {
+					stats, err := queryStatsNative(pid)
+					if err != nil {
+						log.Printf("Error getting stats for PID %d: %v", pid, err)
+						return
+					}
+					if err := SaveStatsNative(db, proc, stats); err != nil {
+						log.Printf("Error saving stats for PID %d: %v", pid, err)
+					}
+				}(proc.PID)
+			}
+		}
+	}
+
+}
+
+func queryStatsNative(pid int) (*Stats, error) {
+	// Create process instance
+	proc, err := process.NewProcess(int32(pid))
+	if err != nil {
+		return nil, fmt.Errorf("Failed to create process instance: %v", err)
+	}
+
+	stats := &Stats{
+		Timestamp: time.Now().Unix(),
+	}
+
+	// CPU stats
+	cpuPercent, err := proc.CPUPercent()
+	if err != nil {
+		return nil, fmt.Errorf("Failed to get CPU percent: %v", err)
+	}
+	stats.CPUUsagePercent = cpuPercent
+
+	cpuTimes, err := proc.Times()
+	if err != nil {
+		return nil, fmt.Errorf("Failed to get CPU times: %v", err)
+	}
+	stats.CPUUsageTotal = uint64((cpuTimes.User + cpuTimes.System) * 1_000_000_000)
+
+	// Memory stats
+	memInfo, err := proc.MemoryInfo()
+	if err != nil {
+		return nil, fmt.Errorf("Failed to get memory info: %v", err)
+	}
+	stats.MemoryUsage = float64(memInfo.RSS)
+	if stats.MemoryLimit > 0 {
+		stats.MemoryPercent = (stats.MemoryUsage / stats.MemoryLimit) * 100
+	}
+
+	// I/O stats
+	ioCounters, err := proc.IOCounters()
+	if err != nil {
+		log.Printf("Warning: could not get I/O stats for PID %d: %v", pid, err)
+	} else {
+		stats.BlockRead = ioCounters.ReadBytes
+		stats.BlockWrite = ioCounters.WriteBytes
+	}
+
+	// Network stats?
+
+	return stats, nil
+}
+
+func SaveStatsNative(db *sql.DB, proc Process, stats *Stats) error {
+	stats.InstanceID = strconv.Itoa(proc.PID) // Use PID as instance_id
+	stats.FunctionID = ""
+	stats.ImageTag = proc.Name // Use process name as image_tag
+
+	return writeStats(db, stats)
+}
+
+func findByProcessName() ([]Process, error) {
+	patterns := []string{
+		"hyperfaas-database",
+		"hyperfaas-leaf",
+		"hyperfaas-worker",
+	}
+
+	var procs []Process
+	for _, pattern := range patterns {
+		cmd := exec.Command("pgrep", "-f", pattern)
+		output, err := cmd.Output()
+		if err != nil {
+			continue
+		}
+
+		pids := strings.Split(strings.TrimSpace(string(output)), "\n")
+		for _, pidStr := range pids {
+			if pidStr == "" {
+				continue
+			}
+
+			pid, err := strconv.Atoi(pidStr)
+			if err != nil {
+				continue
+			}
+
+			proc := Process{
+				PID:  pid,
+				Name: pattern,
+			}
+
+			procs = append(procs, proc)
+		}
+	}
+
+	return procs, nil
+}
+
 // collectMetrics retrieves container stats periodically
 func collectMetrics(ctx context.Context, db *sql.DB) {
 	cli, err := createDockerClient()
@@ -259,7 +427,8 @@ func collectMetrics(ctx context.Context, db *sql.DB) {
 						log.Printf("error: failed to get stats for container %v: %v", c.ID, err)
 						return
 					}
-					if err := saveStats(db, stats, c.ID, c.Image); err != nil {
+					s := StatsResponseToStats(db, stats, c.ID, c.Image)
+					if err := writeStats(db, s); err != nil {
 						log.Printf("error: couldn't save the stats: %v\n", err)
 					}
 				}(cli, db, c)
@@ -292,7 +461,7 @@ func queryStats(ctx context.Context, cli *client.Client, containerID string) (*c
 	return &s, nil
 }
 
-func saveStats(db *sql.DB, s *container.StatsResponse, containerID string, image_tag string) error {
+func StatsResponseToStats(db *sql.DB, s *container.StatsResponse, containerID string, image_tag string) *Stats {
 	mem := calculateMemUsageUnixNoCache(s.MemoryStats)
 	memLimit := float64(s.MemoryStats.Limit)
 	memPercent := calculateMemPercentUnixNoCache(memLimit, mem)
@@ -308,6 +477,24 @@ func saveStats(db *sql.DB, s *container.StatsResponse, containerID string, image
 	// Assume Linux
 	blockRead, blockWrite := calculateBlockIO(s.BlkioStats)
 
+	return &Stats{
+		InstanceID:      instanceID,
+		FunctionID:      "", // functionID is inserted later during import
+		ImageTag:        image_tag,
+		Timestamp:       s.Read.Unix(),
+		CPUUsageTotal:   s.CPUStats.CPUUsage.TotalUsage,
+		CPUUsagePercent: cpuPercent,
+		MemoryUsage:     mem,
+		MemoryLimit:     memLimit,
+		MemoryPercent:   memPercent,
+		BlockRead:       blockRead,
+		BlockWrite:      blockWrite,
+		NetworkRx:       netRx,
+		NetworkTx:       netTx,
+	}
+}
+
+func writeStats(db *sql.DB, s *Stats) error {
 	_, err := db.Exec(`
 		INSERT INTO cpu_mem_stats (
 			instance_id, function_id, image_tag, timestamp,
@@ -330,21 +517,20 @@ func saveStats(db *sql.DB, s *container.StatsResponse, containerID string, image
 				  ?, ?, ?, 
 				  ?, ?, 
 				  ?, ?)`,
-		instanceID,
-		nil, // functionID is inserted later during import
-		image_tag,
-		s.Read.Unix(),
-		s.CPUStats.CPUUsage.TotalUsage,
-		cpuPercent,
-		mem,
-		memLimit,
-		memPercent,
-		blockRead,
-		blockWrite,
-		netRx,
-		netTx,
+		s.InstanceID,
+		s.FunctionID,
+		s.ImageTag,
+		s.Timestamp,
+		s.CPUUsageTotal,
+		s.CPUUsagePercent,
+		s.MemoryUsage,
+		s.MemoryLimit,
+		s.MemoryPercent,
+		s.BlockRead,
+		s.BlockWrite,
+		s.NetworkRx,
+		s.NetworkTx,
 	)
-
 	return err
 }
 
