@@ -84,7 +84,8 @@ def export_model_to_onnx(model, input_dim, target_path):
     onnx_model = convert_sklearn(
         model,
         initial_types=initial_types,
-        final_types=final_types
+        final_types=final_types,
+        target_opset=15,
     )
     metadata = {
         "features": ",".join(INPUT_COLS),
