@@ -706,6 +706,28 @@ def main_optuna(trials=20, jobs=5):
 
 
 if __name__ == "__main__":
-    # main_manual()
-
-    main_optuna()
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Deep Neural Network Training")
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument(
+        "--manual",
+        action="store_true",
+        help="Run the training pipeline manually with predefined hyperparameters.",
+    )
+    group.add_argument(
+        "--optuna",
+        action="store_true",
+        help="Run the training pipeline with Optuna hyperparameter optimization.",
+    )
+    args = parser.parse_args()
+    
+    if args.manual: {
+        main_manual()
+    }
+    elif args.optuna: {
+        main_optuna()
+    }
+    else:
+        raise ValueError("Either --manual or --optuna must be specified.")
+    

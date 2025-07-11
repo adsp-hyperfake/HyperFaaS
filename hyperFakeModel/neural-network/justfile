@@ -1,0 +1,7 @@
+PYTHON_FILE := "neural_network_v2.py"
+
+manual:
+    python3 {{PYTHON_FILE}} --manual
+
+optuna:
+    python3 {{PYTHON_FILE}} --optuna
