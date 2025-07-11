@@ -262,9 +262,11 @@ class TrainingData:
                 function_cpu_usage, function_ram_usage = instance_cpu_ram_lookup.get(
                     (instance_id, int(timestamp / 1e9)), (0.0, 0)
                 )
-                
-                # Function runtime (convert to nanoseconds)
-                function_runtime = int(row['functionprocessingtime'] * 1e9) if pd.notna(row['functionprocessingtime']) else 0
+
+                if pd.notna(row['functionprocessingtime']):
+                    function_runtime = int(row['functionprocessingtime'])
+                else:
+                    continue
                 
                 training_record = {
                     'request_id': request_id,
