@@ -98,6 +98,15 @@ run-local-leaf:
     @echo "Running local leaf"
     go run cmd/leaf/main.go --address=localhost:50050 --log-level=debug --log-format=text --worker-ids=127.0.0.1:50051 --database-address=http://localhost:8999
 
+############################
+# Training Stuff
+############################
+
+train-random-forest db_path="../benchmarks/metrics.db" table="training_data":
+    cd hyperFakeModel/random-forest && \
+        uv sync && \
+        uv run random_forest.py --db-path {{db_path}} --table {{table}}
+
 
 ############################
 # Testing Stuff
