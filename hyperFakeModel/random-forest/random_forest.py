@@ -10,6 +10,8 @@ from skl2onnx.common.data_types import FloatTensorType
 import onnx
 from datetime import datetime
 import argparse
+from tqdm import tqdm
+from tqdm_joblib import tqdm_joblib
 
 # Feature and target column definitions
 INPUT_COLS = [
@@ -106,8 +108,9 @@ def main(table_name, func_tag, target_path, db_path):
 
     # Train model
     input_dim = X_train.shape[1]
-    model = RandomForestRegressor(n_estimators=100, random_state=42)
-    model.fit(X_train, y_train)
+    model = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)
+    with tqdm_joblib(tqdm(total=model.n_estimators, desc="Training RF")):
+        model.fit(X_train, y_train)
 
     # Evaluate on validation and test sets
     metrics_val = compute_metrics(model, X_val, y_val)
