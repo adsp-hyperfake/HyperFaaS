@@ -23,34 +23,34 @@ class Plotter:
         """
         print("Plotting requests processed per second at the leaf node level...")
         
-        # Define time range based on timestamps
+        df_copy = df.copy()
+        df_copy['second'] = df_copy['timestamp'].dt.floor('s')
+        
         start_time = df['timestamp'].min().floor('s')
         end_time = df['timestamp'].max().ceil('s')
-        time_range = pd.date_range(start=start_time, end=end_time, freq='s')
         
         print(f"Time range: {start_time} to {end_time}")
         print(f"Duration: {end_time - start_time}")
         
-        successful_counts = []
-        timeout_counts = []
-        error_counts = []
+        df_copy['status'] = 'error'
+        df_copy.loc[df_copy['grpc_req_duration'].notna(), 'status'] = 'successful'
+        df_copy.loc[df_copy['timeout'].notna(), 'status'] = 'timeout'
         
-        for t in time_range:
-            requests_in_window = (df['timestamp'] >= t) & (df['timestamp'] < t + pd.Timedelta(seconds=1))
-            
-            successful_counts.append((requests_in_window & df['grpc_req_duration'].notna()).sum())
-            timeout_counts.append((requests_in_window & df['timeout'].notna()).sum())
-            error_counts.append((requests_in_window & df['error'].notna()).sum())
+        counts_by_second = (
+            df_copy.groupby(['second', 'status'])
+            .size()
+            .unstack(fill_value=0)
+            .reindex(columns=['successful', 'timeout', 'error'], fill_value=0)
+        )
         
-        plot_data = pd.DataFrame({
-            'time': time_range,
-            'successful': successful_counts,
-            'timeout': timeout_counts,
-            'error': error_counts
-        })
+        time_range = pd.date_range(start=start_time, end=end_time, freq='s')
+        plot_data = counts_by_second.reindex(time_range, fill_value=0)
+        plot_data.index.name = 'time'
+        plot_data = plot_data.reset_index()
         
         plot_data['total'] = plot_data['successful'] + plot_data['timeout'] + plot_data['error']
         
+        # summary statistics
         total_sent = df['grpc_req_duration'].notna().sum()
         total_timeouts = df['timeout'].notna().sum()
         total_errors = df['error'].notna().sum()
@@ -99,38 +99,65 @@ class Plotter:
         plt.close()
 
     def plot_decomposed_latency(self, df: pd.DataFrame):
-        """Plot the source of latency of requests decomposed by image tag"""
-        print("Plotting decomposed latency...")
-        # Function processing time (from the function execution itself)
-        df['function_processing_ms'] = pd.to_timedelta(df['functionprocessingtime']).dt.total_seconds() * 1000
+        """Plot the distribution of latency sources decomposed by image tag using boxplots"""
+        print("Plotting decomposed latency distribution...")
         
-        # Remove rows with missing data
-        df = df.dropna(subset=['scheduling_latency_ms', 'leaf_to_worker_latency_ms', 'function_processing_latency_ms', 'image_tag'])
+        df_clean = df.copy()
         
-        import seaborn.objects as so
+        if 'functionprocessingtime' in df_clean.columns:
+            df_clean['function_processing_ms'] = pd.to_timedelta(df_clean['functionprocessingtime'], errors='coerce').dt.total_seconds() * 1000
+        else:
+            df_clean['function_processing_ms'] = 0
         
-        df_melted = df.melt(
+        required_cols = ['scheduling_latency_ms', 'leaf_to_worker_latency_ms', 'function_processing_latency_ms', 'image_tag']
+        df_clean = df_clean.dropna(subset=required_cols)
+        
+        if df_clean.empty:
+            print("No data available for latency decomposition plot")
+            return
+        
+        latency_cols = ['scheduling_latency_ms', 'leaf_to_worker_latency_ms', 'function_processing_latency_ms']
+        df_melted = df_clean.melt(
             id_vars=['image_tag'], 
-            value_vars=['scheduling_latency_ms', 'leaf_to_worker_latency_ms', 'function_processing_latency_ms'],
+            value_vars=latency_cols,
             var_name='latency_type', 
             value_name='latency_ms'
         )
-        p = (
-            so.Plot(df_melted, x="image_tag", y="latency_ms", color="latency_type")
-            .add(so.Bar(), so.Agg("sum"), so.Norm(func="sum", by=["x"]), so.Stack())
-            .layout(size=(12, 6))
-            .label(
-                title="Latency Decomposition by Image Tag",
-                x="Image Tag",
-                y="Average Latency (ms)",
-                color="Latency Component"
-            )
+        
+        latency_labels = {
+            'scheduling_latency_ms': 'Scheduling',
+            'leaf_to_worker_latency_ms': 'Leaf-to-Worker',
+            'function_processing_latency_ms': 'Function Processing'
+        }
+        df_melted['latency_type'] = df_melted['latency_type'].map(latency_labels)
+        
+        plt.figure(figsize=(14, 8))
+        sns.boxplot(
+            data=df_melted,
+            x='image_tag',
+            y='latency_ms',
+            hue='latency_type',
+            palette='Set2'
         )
+        
+        plt.title('Latency Distribution by Image Tag and Component', fontsize=14, fontweight='bold')
+        plt.xlabel('Image Tag', fontsize=12)
+        plt.ylabel('Latency (ms)', fontsize=12)
+        plt.ylim(0,df_melted['latency_ms'].quantile(0.9))
+        plt.legend(title='Latency Component', bbox_to_anchor=(1.05, 1), loc='upper left')
+        plt.grid(True, alpha=0.3, axis='y')
+        plt.xticks(rotation=45, ha='right')
+        plt.tight_layout()
+        
+        print("\nLatency Distribution Summary:")
+        summary_stats = df_melted.groupby(['image_tag', 'latency_type'])['latency_ms'].agg(['count', 'mean', 'median', 'std']).round(2)
+        print(summary_stats)
+        
         if self.show:
-            p.show()
+            plt.show()
         if self.save:
             os.makedirs(self.save_path, exist_ok=True)
-            p.save(os.path.join(self.save_path, f"{self.prefix}decomposed_latency.png"))
+            plt.savefig(os.path.join(self.save_path, f"{self.prefix}decomposed_latency.png"))
         plt.close()
 
     def plot_expected_rps(self, df: pd.DataFrame, scenarios_path: str = None):
