@@ -198,6 +198,26 @@ clean-metrics:
     rm ./load-generator/test_results.csv 2> /dev/null
     rm ./load-generator/stderr_output.txt 2> /dev/null
 
+create-original-data-plot:
+    just start
+    just load-generator/run-sequential
+    just load-generator/export-sequential
+    mv ./benchmarks/metrics.db ./benchmarks/metrics_original.db
+    docker compose down    
+
+create-fake-data-plot:
+    just fake-start
+    just load-generator/run-sequential
+    just load-generator/export-sequential
+    mv ./benchmarks/metrics.db ./benchmarks/metrics_model.db
+    docker compose down
+
+plot-comparison:
+    cd benchmarks/ && uv run main.py --plot \
+    --db-paths metrics_original.db metrics_model.db \
+    --plot-save-path ./plots/ \
+    --prefix comparison_
+
 ############################
 # Misc. Stuff
 ############################

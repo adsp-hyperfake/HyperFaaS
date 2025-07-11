@@ -1,7 +1,7 @@
 import argparse
 import sys
 import sqlite3
-
+import os
 import pandas as pd
 from data_loader import Data
 from analysis import (
@@ -83,8 +83,10 @@ def main():
         description='Analyze function metrics from SQLite database and/or k6 scenarios')
     
     # Data source options
-    parser.add_argument('--db-path', default='metrics.db',
-                        help='Path to SQLite database (default: metrics.db)')
+    parser.add_argument(
+        '--db-paths', nargs='+', metavar='DB',
+        help='One or more SQLite database paths to plot (will be labeled by filename stem)'
+    )
     parser.add_argument('--scenarios-path', 
                         help='Path to k6 scenarios JSON file (optional)')
     
@@ -115,13 +117,22 @@ def main():
     if args.scenarios_path:
             scenarios_df = d.load_k6_scenarios(args.scenarios_path)
             plotter.plot_expected_rps(scenarios_df, args.scenarios_path)
-    
-    # Run plotting if requested
-    if args.plot:
-        if d.metrics is None:
-            metrics = d.load_metrics(args.db_path)
-        plotter.plot_throughput_leaf_node(d.metrics)
-        plotter.plot_decomposed_latency(d.metrics)
+
+    if args.db_paths and args.plot:
+        metrics_list = []
+        for path in args.db_paths:
+            label = os.path.splitext(os.path.basename(path))[0]
+            df = d.load_metrics_labeled(path, label=label)
+            metrics_list.append(df)
+
+        if len(metrics_list) == 1:
+            print(f"\n=== plotting for run '{metrics_list[0]['worker_type'].iat[0]}' ===")
+            plotter.plot_throughput_leaf_node(metrics_list[0])
+            plotter.plot_decomposed_latency(metrics_list[0])
+        else:
+            runs = {df["worker_type"].iat[0]: df for df in metrics_list}
+            plotter.plot_latency_rps_comparison(runs)
+            plotter.plot_latency_ecdf_per_image(runs, cols=3)
 
 if __name__ == "__main__":
     main() 

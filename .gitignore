@@ -403,4 +403,4 @@ $RECYCLE.BIN/
 
 # End of https://www.toptal.com/developers/gitignore/api/go,windows,linux,macos,goland,python
 
-benchmarks/metrics.db
+benchmarks/metrics*.db

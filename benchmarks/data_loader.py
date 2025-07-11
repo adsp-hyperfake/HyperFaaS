@@ -57,6 +57,12 @@ class Data:
         self.metrics = df
         return df
 
+    def load_metrics_labeled(self, db_path: str, label: str) -> pd.DataFrame:
+        """Convenience wrapper around load_metrics that adds a column identifying the worker implementation (e.g. 'original' or 'model')."""
+        df = self.load_metrics(db_path).copy()
+        df["worker_type"] = label
+        return df
+
     def load_cold_start_times(self, db_path: str) -> pd.DataFrame:
         """Calculate cold start times for each function instance."""
             
