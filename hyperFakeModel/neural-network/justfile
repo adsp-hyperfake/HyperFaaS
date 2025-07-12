@@ -179,8 +179,8 @@ dev-test: manual
 dev-optuna: optuna
 
 # Cloud workflow  
-deploy: setup deploy
-cleanup: cleanup
+cloud-deploy: setup deploy
+cloud-cleanup: cleanup
 
 
 
