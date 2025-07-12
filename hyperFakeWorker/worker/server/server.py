@@ -23,6 +23,7 @@ def serve(config: WorkerConfig):
             logger.info(f"Active Functions: {controller_servicer._function_manager.num_recently_active_functions}")
             logger.info(f"Scheduled Functions: {controller_servicer._function_manager.num_functions}")
             logger.info(f"Resource Consumption: CPU : {controller_servicer._function_manager.total_cpu_usage} | RAM: {controller_servicer._function_manager.total_ram_usage}")
+            logger.info(f"Average remaining runtime: {controller_servicer._function_manager.avg_remaining_runtime / 1_000_000_000}")
     except KeyboardInterrupt:
         server.stop(6.0)
         server.wait_for_termination()

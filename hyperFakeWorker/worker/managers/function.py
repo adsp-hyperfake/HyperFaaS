@@ -1,4 +1,6 @@
+from statistics import mean
 import threading
+import time
 from weakref import WeakSet
 
 from ..function import FunctionIdStr, InstanceIdStr
@@ -15,6 +17,16 @@ class FunctionManager():
         self.instanceId_to_instance_map: dict[InstanceIdStr, AbstractFunction] = {}
         # function_id : set[Function]
         self.functionId_to_instances_map: dict[FunctionIdStr, WeakSet[AbstractFunction]] = {}
+
+    @property
+    def avg_remaining_runtime(self) -> float:
+        now = time.time_ns()
+        running_functions = [e for e in self.instanceId_to_instance_map.values() if e.is_active]
+        if len(running_functions) < 1:
+            return 0
+        remaining_runtime = [e.last_worked_at - now for e in running_functions]
+        average_remaining_runtime = mean(remaining_runtime)
+        return average_remaining_runtime
 
     @property
     def total_cpu_usage(self) -> float:
