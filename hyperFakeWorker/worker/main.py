@@ -1,6 +1,6 @@
 #!/bin/python
-from pathlib import Path
 import logging
+from pathlib import Path
 
 import click
 
@@ -104,6 +104,114 @@ def client():
             print(f"Checking instance {func.instance_id}: {func}")
             call_future = stub.Call(CallRequest(instance_id=InstanceID(id=func.instance_id), function_id=function.function_id))
             print(call_future)
+
+
+@main.command()
+@click.pass_context
+def test_call(ctx):
+    """Calls the worker with an echo function."""
+    import grpc
+    import httpx
+
+    from .api.common.common_pb2 import CallRequest, FunctionID, InstanceID
+    from .api.controller.controller_pb2_grpc import ControllerStub
+
+    logger = logging.getLogger()
+    config: WorkerConfig = ctx.obj
+
+    # Register the function in the key-value store first
+    function_id_str = "hyperfaas-echo:latest"
+    kv_url = config.db_address
+    if not kv_url.startswith("http://"):
+        kv_url = f"http://{kv_url}"
+    function_metadata = {
+        "image_tag": function_id_str,
+        "config": {
+            "mem_limit": 128,
+            "cpu_quota": 100000,
+            "cpu_period": 100000,
+            "timeout": 10,
+            "max_concurrency": 1
+        }
+    }
+    try:
+        response = httpx.post(kv_url, json=function_metadata)
+        response.raise_for_status()
+        data = response.json()
+        # Expecting the store to return a JSON with the function id, e.g. {"FunctionID": "..."}
+        real_function_id = data.get("function_id", function_id_str)
+        logger.info(
+            f"Registered function {real_function_id} in key-value store.")
+    except Exception as e:
+        logger.error(f"Failed to register function in key-value store: {e}")
+        real_function_id = function_id_str
+
+    # Connect to the worker
+    worker_port = config.address.split(":")[-1]
+    channel = grpc.insecure_channel(f"localhost:{worker_port}")
+    stub = ControllerStub(channel)
+
+    # Start a function instance
+    function_id = FunctionID(id=real_function_id)
+    start_response = stub.Start(function_id)
+    instance_id = start_response.instance_id.id
+
+    # Call the function
+    call_request = CallRequest(
+        function_id=function_id,
+        instance_id=InstanceID(id=instance_id),
+        data=b"hello"
+    )
+    response = stub.Call(call_request)
+    logger.info(f"Function call response: {response}")
+
+@main.command()
+@click.option('--leaf-address', default='localhost:50050', help='Address of the leaf server.')
+@click.pass_context
+def test_call_leaf(ctx, leaf_address):
+    import grpc
     
+    from .api.leaf.leaf_pb2_grpc import LeafStub
+    from .api.leaf.leaf_pb2 import CreateFunctionRequest, ScheduleCallRequest
+    from .api.common.common_pb2 import ImageTag, Config, CPUConfig
+    
+    logger = logging.getLogger()
+    
+    
+    channel = grpc.insecure_channel(leaf_address)
+    stub = LeafStub(channel)
+    
+    request = CreateFunctionRequest(
+        image_tag=ImageTag(tag="hyperfaas-echo:latest"),
+        config=Config(
+            memory=100 * 1024 * 1024,  # 100MB
+            cpu=CPUConfig(
+                period=100000,
+                quota=50000
+            ),
+            max_concurrency=500,
+            timeout=10
+        )
+    )
+    
+    # Call CreateFunction
+    response = stub.CreateFunction(request)
+    logger.info(f"Created function with ID: {response.functionID.id}")
+    
+    call_request = ScheduleCallRequest(
+        functionID=response.functionID,
+        data=b"hello"
+    )
+    
+    # Call ScheduleCall
+    call_response = stub.ScheduleCall(call_request)
+    if "error" in call_response:
+        logger.error(f"Error in call response: {call_response.error.message}")
+        return
+    logger.info(f"Call response: {call_response}")
+    
+    
+    
+
 if __name__ == "__main__":
     main()

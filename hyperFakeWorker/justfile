@@ -11,6 +11,7 @@ proto:
   uv run python -m grpc_tools.protoc -I../proto "../proto/common/common.proto" --python_out=./worker/api --pyi_out=./worker/api --grpc_python_out=./worker/api
   uv run python -m grpc_tools.protoc -I../proto "../proto/controller/controller.proto" --python_out=./worker/api --pyi_out=./worker/api --grpc_python_out=./worker/api
   uv run python -m grpc_tools.protoc -I../proto "../proto/function/function.proto" --python_out=./worker/api --pyi_out=./worker/api --grpc_python_out=./worker/api
+  uv run python -m grpc_tools.protoc -I../proto "../proto/leaf/leaf.proto" --python_out=./worker/api --pyi_out=./worker/api --grpc_python_out=./worker/api
 
 check:
   @echo "Checking if functions are still alive"
@@ -22,6 +23,12 @@ trace:
 run-local:
   @echo "Running hyperFake worker"
   uv run python -m worker.main -m models/hyperfaas-bfs-json.onnx hyperfaas-bfs-json -m models/hyperfaas-echo.onnx hyperfaas-echo -m models/hyperfaas-thumbnailer-json.onnx hyperfaas-thumbnailer-json -w 64 server 
+
+test-call:
+  uv run python -m worker.main test-call
+
+test-call-leaf:
+  uv run python -m worker.main test-call-leaf
 
 test:
   @echo "Running tests that require external components"
