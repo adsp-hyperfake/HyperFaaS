@@ -17,4 +17,3 @@ class WorkerConfig:
     update_buffer_size: int
     db_address: str
     models: dict[str, Path]
-    leaf_address: str
