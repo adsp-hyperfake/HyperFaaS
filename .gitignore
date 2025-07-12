@@ -404,6 +404,6 @@ $RECYCLE.BIN/
 # End of https://www.toptal.com/developers/gitignore/api/go,windows,linux,macos,goland,python
 
 benchmarks/metrics.db
-hyperFakeModel/neural-network/*.pth
-hyperFakeModel/neural-network/*.onnx
-hyperFakeModel/neural-network/*.db
+hyperFakeModel/neural-network/**/*.json
+hyperFakeModel/neural-network/**/*.onnx
+hyperFakeModel/neural-network/**/*.db

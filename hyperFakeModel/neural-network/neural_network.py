@@ -1,5 +1,6 @@
 from datetime import datetime
 from functools import partial
+import json
 import os
 import sqlite3
 import numpy as np
@@ -16,7 +17,6 @@ from torch.utils.data import Dataset, DataLoader
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import optuna
-from optuna.samplers import TPESampler
 
 ###########
 ### WIP ###
@@ -150,11 +150,39 @@ def create_sample_data(n_samples=10000):
     y = df[OUTPUT_COLS].values
     return X, y
 
+def export_model_to_onnx(model, target_path):
+    # Save the model
+    model.eval()
+    dummy_input = torch.zeros(1, model.input_dim)
+    torch.onnx.export(
+        model.to(DEVICE),
+        dummy_input.to(DEVICE),
+        target_path,
+        input_names=["input"],
+        output_names=["output"],
+        do_constant_folding=True,  # Optimize the model
+    )
+    print(f"Exported model to {target_path}.")
 
-def load_data_from_dbs(dbs_path, table_name, func_tag):
-    """Load data from all SQLite databases in a directory and return features and targets as numpy arrays."""
+def plot_loss_curves(train_losses, val_losses):
+    epochs = range(1, len(train_losses) + 1)
+    plt.figure(figsize=(8, 5))
+    plt.plot(epochs, train_losses, label="Train Loss")
+    plt.plot(epochs, val_losses, label="Validation Loss")
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.title("Loss curves")
+    plt.legend()
+    plt.grid(True)
+    # plt.savefig('plot.png')
+    plt.show(block=False)
+
+    plt.pause(0.01)
+
+def load_data_from_dbs(dbs_path, table_name):
+    """Load data from all SQLite databases in a directory returns a merged dataframe."""
     all_dfs = []
-    query = f"SELECT {', '.join(INPUT_COLS + OUTPUT_COLS)} FROM {table_name} WHERE function_image_tag = '{func_tag}'"
+    query = f"SELECT {', '.join(INPUT_COLS + OUTPUT_COLS + ['function_image_tag'])} FROM {table_name}"
     for filename in os.listdir(dbs_path):
         if filename.endswith(".db") or filename.endswith(".sqlite"):
             db_path = os.path.join(dbs_path, filename)
@@ -183,90 +211,61 @@ def load_data_from_dbs(dbs_path, table_name, func_tag):
     ]
     mask = (combined_df[columns_to_clean] == 0).any(axis=1)
     cleaned_df = combined_df[~mask]
-    X = cleaned_df[INPUT_COLS].values
-    y = cleaned_df[OUTPUT_COLS].values
     print(
-        f"Loaded {len(X)} rows from {len(all_dfs)} database{'s' if len(all_dfs) > 1 else ''} in directory '{dbs_path}'\n"
-        f"Cleaned a total of {len(combined_df) - len(X)} rows containing zero values in any of the following columns:\n\t"
+        f"Loaded {len(cleaned_df)} rows from {len(all_dfs)} database{'s' if len(all_dfs) > 1 else ''} in directory '{dbs_path}'\n"
+        f"Cleaned a total of {len(combined_df) - len(cleaned_df)} rows containing zero values in any of the following columns:\n\t"
         f"{', '.join(columns_to_clean)}"
     )
+    return cleaned_df
+
+
+def get_targets_and_features_from_tag(df, image_tag):
+    """Takes a dataframe and returns only the rows for the relevant image tag."""
+    image_tag_data_only = df[df["function_image_tag"] == image_tag]
+    X = image_tag_data_only[INPUT_COLS].values
+    y = image_tag_data_only[OUTPUT_COLS].values
     return X, y
 
 
-# def load_data_from_db(db_path, table_name, func_tag):
-#     """Load data from SQLite database and return features and targets as numpy arrays."""
-#     # Read data from database
-#     query = f"SELECT {', '.join(INPUT_COLS + OUTPUT_COLS)} FROM {table_name} WHERE function_image_tag = '{func_tag}'"
-#     df = None
-#     try:
-#         with sqlite3.connect(db_path) as conn:
-#             df = pd.read_sql_query(query, conn)
-#     except Exception as e:
-#         print(f"Error loading data: {e}")
-#     if df is None or df.empty:
-#         raise EmptyDataError(f"DataFrame is empty: check the state of the db: {db_path}")
-#     # Split features and targets
-#     X = df[INPUT_COLS].values
-#     y = df[OUTPUT_COLS].values
-#     print(f"Loaded {len(X)} rows from database")
-#     return X, y
+def split_data(X, y, test_size=0.35, val_size=0.5, seed=42):
+    X_temp, X_test, y_temp, y_test = train_test_split(
+        X, y, test_size=test_size, random_state=seed
+    )
+    X_train, X_val, y_train, y_val = train_test_split(
+        X_temp, y_temp, test_size=val_size, random_state=seed
+    )
+    return X_train, X_val, X_test, y_train, y_val, y_test
 
 
-def train_epoch(model, train_data_loader, criterion, optimizer):
-    """Train the model for one epoch."""
-    model.train()
-    total_loss = 0.0
+def prepare_dataloaders(
+    X_train, y_train, X_val, y_val, batch_size, X_test=None, y_test=None
+):
+    train_dataset = CustomDataset(X_train, y_train, fit_scalers=True)
+    val_dataset = CustomDataset(
+        X_val,
+        y_val,
+        scaler_X=train_dataset.scaler_X,
+        scaler_y=train_dataset.scaler_y,
+        fit_scalers=False,
+    )
 
-    for data, targets in train_data_loader:
-        data, targets = data.to(DEVICE), targets.to(DEVICE)
-        optimizer.zero_grad()
-        # forward pass
-        predictions = model(data)
-        prodictions_normalized = (predictions - model.output_mean) / model.output_scale
-        targets_normalized = (targets - model.output_mean) / model.output_scale
-        loss = criterion(prodictions_normalized, targets_normalized)
-        # backward pass
-        loss.backward()
-        # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-        # update weights
-        optimizer.step()
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
-        total_loss += loss.item()
+    test_loader = None
+    if X_test is not None and y_test is not None:
+        test_dataset = CustomDataset(
+            X_test,
+            y_test,
+            scaler_X=train_dataset.scaler_X,
+            scaler_y=train_dataset.scaler_y,
+            fit_scalers=False,
+        )
+        test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+    else:
+        test_dataset = None
 
-    return total_loss / len(train_data_loader)
-
-
-def evaluate_model(model, data_loader, criterion):
-    """Evaluate the model on a dataset."""
-    model.eval()
-    total_loss = 0.0
-    num_batches = 0
-    all_predictions = []
-    all_targets = []
-
-    with torch.no_grad():
-        for data, targets in data_loader:
-            data, targets = data.to(DEVICE), targets.to(DEVICE)
-
-            # Forward pass
-            predictions = model(data)
-            prodictions_normalized = (
-                predictions - model.output_mean
-            ) / model.output_scale
-            targets_normalized = (targets - model.output_mean) / model.output_scale
-            # Loss calcs
-            loss = criterion(prodictions_normalized, targets_normalized)
-            total_loss += loss.item()
-            num_batches += 1
-            # .cpu() copies from gpu to cpu mem if needed
-            all_predictions.append(prodictions_normalized.cpu().numpy())
-            all_targets.append(targets_normalized.cpu().numpy())
-
-    all_predictions = np.concatenate(all_predictions, axis=0)
-    all_targets = np.concatenate(all_targets, axis=0)
-
-    return total_loss / num_batches, all_predictions, all_targets
-
+    return train_loader, val_loader, test_loader, train_dataset
 
 def train_model(
     model,
@@ -335,6 +334,62 @@ def train_model(
     return train_losses, val_losses
 
 
+def train_epoch(model, train_data_loader, criterion, optimizer):
+    """Train the model for one epoch."""
+    model.train()
+    total_loss = 0.0
+
+    for data, targets in train_data_loader:
+        data, targets = data.to(DEVICE), targets.to(DEVICE)
+        optimizer.zero_grad()
+        # forward pass
+        predictions = model(data)
+        prodictions_normalized = (predictions - model.output_mean) / model.output_scale
+        targets_normalized = (targets - model.output_mean) / model.output_scale
+        loss = criterion(prodictions_normalized, targets_normalized)
+        # backward pass
+        loss.backward()
+        # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        # update weights
+        optimizer.step()
+
+        total_loss += loss.item()
+
+    return total_loss / len(train_data_loader)
+
+
+def evaluate_model(model, data_loader, criterion):
+    """Evaluate the model on a dataset."""
+    model.eval()
+    total_loss = 0.0
+    num_batches = 0
+    all_predictions = []
+    all_targets = []
+
+    with torch.no_grad():
+        for data, targets in data_loader:
+            data, targets = data.to(DEVICE), targets.to(DEVICE)
+
+            # Forward pass
+            predictions = model(data)
+            prodictions_normalized = (
+                predictions - model.output_mean
+            ) / model.output_scale
+            targets_normalized = (targets - model.output_mean) / model.output_scale
+            # Loss calcs
+            loss = criterion(prodictions_normalized, targets_normalized)
+            total_loss += loss.item()
+            num_batches += 1
+            # .cpu() copies from gpu to cpu mem if needed
+            all_predictions.append(prodictions_normalized.cpu().numpy())
+            all_targets.append(targets_normalized.cpu().numpy())
+
+    all_predictions = np.concatenate(all_predictions, axis=0)
+    all_targets = np.concatenate(all_targets, axis=0)
+
+    return total_loss / num_batches, all_predictions, all_targets
+
+
 def calculate_metrics(y_true, y_pred, target_names):
     """Calculate regression metrics for each target."""
     metrics = {}
@@ -365,21 +420,6 @@ def calculate_metrics(y_true, y_pred, target_names):
     return metrics
 
 
-def export_model_to_onnx(model, target_path):
-    # Save the model
-    model.eval()
-    dummy_input = torch.zeros(1, model.input_dim)
-    torch.onnx.export(
-        model.to(DEVICE),
-        dummy_input.to(DEVICE),
-        target_path,
-        input_names=["input"],
-        output_names=["output"],
-        do_constant_folding=True,  # Optimize the model
-    )
-    print(f"Exported model to {target_path}.")
-
-
 def predict(model, input_data):
     """Make predictions using the trained model."""
     # ensure input_data is a 2D array
@@ -395,64 +435,6 @@ def predict(model, input_data):
         predictions = model(X_tensor).cpu().numpy()
 
     return predictions
-
-
-def plot_loss_curves(train_losses, val_losses):
-    epochs = range(1, len(train_losses) + 1)
-    plt.figure(figsize=(8, 5))
-    plt.plot(epochs, train_losses, label="Train Loss")
-    plt.plot(epochs, val_losses, label="Validation Loss")
-    plt.xlabel("Epoch")
-    plt.ylabel("Loss")
-    plt.title("Loss curves")
-    plt.legend()
-    plt.grid(True)
-    # plt.show()
-    plt.show(block=False)
-
-    plt.pause(0.01)
-
-
-def split_data(X, y, test_size=0.35, val_size=0.5, seed=42):
-    X_temp, X_test, y_temp, y_test = train_test_split(
-        X, y, test_size=test_size, random_state=seed
-    )
-    X_train, X_val, y_train, y_val = train_test_split(
-        X_temp, y_temp, test_size=val_size, random_state=seed
-    )
-    return X_train, X_val, X_test, y_train, y_val, y_test
-
-
-def prepare_dataloaders(
-    X_train, y_train, X_val, y_val, batch_size, X_test=None, y_test=None
-):
-    train_dataset = CustomDataset(X_train, y_train, fit_scalers=True)
-    val_dataset = CustomDataset(
-        X_val,
-        y_val,
-        scaler_X=train_dataset.scaler_X,
-        scaler_y=train_dataset.scaler_y,
-        fit_scalers=False,
-    )
-
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
-
-    test_loader = None
-    if X_test is not None and y_test is not None:
-        test_dataset = CustomDataset(
-            X_test,
-            y_test,
-            scaler_X=train_dataset.scaler_X,
-            scaler_y=train_dataset.scaler_y,
-            fit_scalers=False,
-        )
-        test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
-    else:
-        test_dataset = None
-
-    return train_loader, val_loader, test_loader, train_dataset
-
 
 def initialize_model(
     input_dim,
@@ -478,93 +460,23 @@ def initialize_model(
     return model, criterion, optimizer, scheduler
 
 
-def objective(trial, X=None, y=None, dbs_path=None):
-    """
-    Optuna objective function for hyperparameter optimization.
-    This function defines hyperparameters to be optimized and trains the model once and returns the validation loss.
-    It is supposed to be used with Optuna to find very good hyperparameters for the model.
-    """
-
-    # Define hyperparameters and their search space
-    n_layers = trial.suggest_int("n_layers", 1, 4)
-    hidden_dims = []
-    dropouts = []
-    for i in range(n_layers):
-        hidden_dim = trial.suggest_int(f"hidden_size_l{i}", 4, 128)
-        dropout = trial.suggest_float(f"dropout_l{i}", 0.01, 0.5)
-        hidden_dims.append(hidden_dim)
-        dropouts.append(dropout)
-
-    optimizer_name = trial.suggest_categorical("optimizer", ["Adam", "SGD", "RMSprop"])
-    lr = trial.suggest_float("lr", 1e-5, 1e-2, log=True)
-    weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-2, log=True)
-    batch_size = trial.suggest_categorical("batch_size", [16, 32, 64, 128])
-    patience = trial.suggest_int("patience", 5, 20)
-
-    # Prepare data
-    if X is None and y is None:
-        X, y = create_sample_data()
-
-    # Split data and prepare dataloaders
-    X_train, X_val, _, y_train, y_val, _ = split_data(X, y)
-    train_loader, val_loader, _, train_dataset = prepare_dataloaders(
-        X_train, y_train, X_val, y_val, batch_size
-    )
-
-    # Define model, loss function, and optimizer
-    input_dim = X.shape[1]
-    output_dim = y.shape[1]
-
-    model, criterion, optimizer, scheduler = initialize_model(
-        input_dim,
-        output_dim,
-        hidden_dims,
-        dropouts,
-        lr,
-        weight_decay,
-        optimizer_name,
-        scheduler_patience=5,
-    )
-
-    model.set_scalers(train_dataset.scaler_X, train_dataset.scaler_y)
-
-    # Train the model
-    train_model(
-        model,
-        train_loader,
-        val_loader,
-        criterion,
-        optimizer,
-        scheduler,
-        num_epochs=50,
-        patience=patience,
-    )
-    val_loss, _, _ = evaluate_model(model, val_loader, criterion)
-
-    return val_loss
-
-
-def main(
-    func_tag,
+def setup_model_training(
+    identifier,
     target_path,
-    X=None,
-    y=None,
+    X,
+    y,
+    epochs,
     hyperparams=None,
 ):
-    """Main training pipeline."""
+    """Trains the model."""
     torch.manual_seed(42)
     np.random.seed(42)
 
-    print(f"Starting training pipeline for {func_tag} using device {DEVICE}.")
+    print(f"Starting training for {identifier} using device {DEVICE}.")
 
-    # Load and preprocess data to tensors
-    if X is None and y is None:
-        X, y = create_sample_data()
-
-    # Split data
+    # train/val/test split
     X_train, X_val, X_test, y_train, y_val, y_test = split_data(X, y)
 
-    # If hyperparameters are provided, use them; otherwise, set default values
     if hyperparams is None:
         hyperparams = {
             "hidden_dims": [95, 47, 9],
@@ -606,7 +518,7 @@ def main(
         criterion,
         optimizer,
         scheduler,
-        num_epochs=50,
+        num_epochs=epochs,
         patience=hyperparams["patience"],
     )
 
@@ -630,104 +542,184 @@ def main(
     plot_loss_curves(train_losses, val_losses)
 
 
-def main_manual():
-    """Main function to run the training pipeline manually."""
-    func_tags = [
-        "hyperfaas-bfs-json:latest",
-        "hyperfaas-thumbnailer-json:latest",
-        "hyperfaas-echo:latest",
-    ]
-    short_names = ["bfs", "thumbnailer", "echo"]
-    dbs_path = os.path.normpath(os.path.join(CURR_DIR, "..", "..", "..", "dbs"))
-    table_name = "training_data"
+def optuna_objective(trial, X, y, epochs):
+    """
+    Optuna objective function for hyperparameter optimization.
+    This function defines hyperparameters to be optimized and trains the model once and returns the validation loss.
+    It is supposed to be used with Optuna to find very good hyperparameters for the model.
+    """
 
-    for func_tag, short_name in zip(func_tags, short_names):
-        X, y = load_data_from_dbs(dbs_path, table_name, func_tag)
-        target_path = os.path.join(CURR_DIR, f"{short_name}.onnx")
-        main(table_name, func_tag, target_path, X=X, y=y)
+    # Define hyperparameters and their search space
+    n_layers = trial.suggest_int("n_layers", 1, 4)
+    hidden_dims = []
+    dropouts = []
+    for i in range(n_layers):
+        hidden_dim = trial.suggest_int(f"hidden_size_l{i}", 4, 128)
+        dropout = trial.suggest_float(f"dropout_l{i}", 0.01, 0.5)
+        hidden_dims.append(hidden_dim)
+        dropouts.append(dropout)
+
+    optimizer_name = trial.suggest_categorical("optimizer", ["Adam", "SGD", "RMSprop"])
+    lr = trial.suggest_float("lr", 1e-5, 1e-2, log=True)
+    weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-2, log=True)
+    batch_size = trial.suggest_categorical("batch_size", [16, 32, 64, 128])
+    patience = trial.suggest_int("patience", 5, 20)
+
+    # Split data and prepare dataloaders
+    X_train, X_val, _, y_train, y_val, _ = split_data(X, y)
+    train_loader, val_loader, _, train_dataset = prepare_dataloaders(
+        X_train, y_train, X_val, y_val, batch_size
+    )
+
+    # Define model, loss function, and optimizer
+    input_dim = X.shape[1]
+    output_dim = y.shape[1]
+
+    model, criterion, optimizer, scheduler = initialize_model(
+        input_dim,
+        output_dim,
+        hidden_dims,
+        dropouts,
+        lr,
+        weight_decay,
+        optimizer_name,
+        scheduler_patience=5,
+    )
+
+    model.set_scalers(train_dataset.scaler_X, train_dataset.scaler_y)
+
+    # Train the model
+    train_model(
+        model,
+        train_loader,
+        val_loader,
+        criterion,
+        optimizer,
+        scheduler,
+        num_epochs=epochs,
+        patience=patience,
+    )
+    val_loss, _, _ = evaluate_model(model, val_loader, criterion)
+
+    return val_loss
 
 
-def main_optuna(trials=20, jobs=5):
+def run_optuna_study(
+    identifier, target_path, trials, jobs, epochs, final_epochs, X, y, state_db: None
+):
     """Main function to run the training pipeline with Optuna hyperparameter optimization."""
-    # func_tags = ["hyperfaas-bfs-json:latest", "hyperfaas-thumbnailer-json:latest", "hyperfaas-echo:latest"]
-    func_tags = ["hyperfaas-thumbnailer-json:latest"]
-    # short_names = ["bfs", "thumbnailer", "echo"]
-    short_names = ["thumbnailer"]
-    dbs_path = os.path.normpath(os.path.join(CURR_DIR, "..", "..", "..", "dbs"))
-    table_name = "training_data"
+    # Wrap the objective function with partial to pass additional arguments
+    wrapped_objective = partial(optuna_objective, X=X, y=y, epochs=epochs)
 
-    for func_tag, short_name in zip(func_tags, short_names):
-        X, y = load_data_from_dbs(dbs_path, table_name, func_tag)
-
-        # Wrap the objective function with partial to pass additional arguments
-        wrapped_objective = partial(objective, X=X, y=y, dbs_path=dbs_path)
-
-        # Create an Optuna study and optimize
-        identifier = (
-            "study_" + short_name + "_" + datetime.now().strftime("%Y%m%d_%H%M%S")
-        )
-        study_db_path = os.path.join(CURR_DIR, f"{identifier}.db")
-        study_db_uri = f"sqlite:///{study_db_path}"
-        sampler = TPESampler(seed=42)
+    # Create an Optuna study and optimize
+    if state_db:
         study = optuna.create_study(
-            direction="minimize", study_name=identifier, storage=study_db_uri, sampler=sampler
+            direction="minimize", study_name=identifier, storage=state_db
         )
-        study.optimize(wrapped_objective, n_trials=trials, n_jobs=jobs)
-
-        print("Study over, the following optimized parameters were established:")
-        for key, value in study.best_params.items():
-            print(f"{key}: {value}")
-
-        # Send notification via ntfy
-        requests.post(
-            "https://ntfy.sh/hyperfake",
-            data="\n".join(f"{k}: {v}" for k, v in study.best_params.items()).encode(
-                "utf-8"
-            ),
-        )
-
-        # Save the best hyperparameters
-        n_layers = study.best_params["n_layers"]
-        hyperparams = {
-            "hidden_dims": [
-                study.best_params[f"hidden_size_l{i}"] for i in range(n_layers)
-            ],
-            "dropouts": [study.best_params[f"dropout_l{i}"] for i in range(n_layers)],
-            "lr": study.best_params["lr"],
-            "weight_decay": study.best_params["weight_decay"],
-            "batch_size": study.best_params["batch_size"],
-            "patience": study.best_params["patience"],
-            "optimizer": study.best_params["optimizer"],
-        }
-
-        # Train the model with the best hyperparameters
-        target_path = os.path.join(CURR_DIR, f"{short_name}.onnx")
-        main(func_tag, target_path, X=X, y=y, hyperparams=hyperparams)
-
-
-if __name__ == "__main__":
-    import argparse
-    
-    parser = argparse.ArgumentParser(description="Deep Neural Network Training")
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument(
-        "--manual",
-        action="store_true",
-        help="Run the training pipeline manually with predefined hyperparameters.",
-    )
-    group.add_argument(
-        "--optuna",
-        action="store_true",
-        help="Run the training pipeline with Optuna hyperparameter optimization.",
-    )
-    args = parser.parse_args()
-    
-    if args.manual: {
-        main_manual()
-    }
-    elif args.optuna: {
-        main_optuna()
-    }
     else:
-        raise ValueError("Either --manual or --optuna must be specified.")
-    
+        study = optuna.create_study(direction="minimize", study_name=identifier)
+    study.optimize(wrapped_objective, n_trials=trials, n_jobs=jobs)
+
+    print("Study over, the following optimized parameters were established:")
+    for key, value in study.best_params.items():
+        print(f"{key}: {value}")
+
+    # Send notification via ntfy
+    requests.post(
+        "https://ntfy.sh/hyperfake",
+        data="\n".join(f"{k}: {v}" for k, v in study.best_params.items()).encode(
+            "utf-8"
+        ),
+    )
+
+    # Save the best hyperparameters
+    n_layers = study.best_params["n_layers"]
+    hyperparams = {
+        "hidden_dims": [
+            study.best_params[f"hidden_size_l{i}"] for i in range(n_layers)
+        ],
+        "dropouts": [study.best_params[f"dropout_l{i}"] for i in range(n_layers)],
+        "lr": study.best_params["lr"],
+        "weight_decay": study.best_params["weight_decay"],
+        "batch_size": study.best_params["batch_size"],
+        "patience": study.best_params["patience"],
+        "optimizer": study.best_params["optimizer"],
+    }
+
+    # Write the best hyperparameters to a file
+    hyperparams_target = os.path.join(
+        CURR_DIR, "models", f"{identifier}_hyperparams.json"
+    )
+    with open(hyperparams_target, "w") as f:
+        json.dump(hyperparams, f, indent=4)
+
+    # Train the model with the best hyperparameters
+    setup_model_training(identifier, target_path, X, y, final_epochs, hyperparams)
+
+
+def manual_pipeline(
+    func_tags,
+    short_names,
+    dbs_path,
+    table_name,
+    sample_data,
+    target_path,
+    epochs,
+    hyperparams
+):
+    """Main function to run the manual training pipeline."""
+    if not sample_data:
+        df = load_data_from_dbs(dbs_path, table_name)
+    for func_tag, short_name in zip(func_tags, short_names):
+        if not sample_data:
+            X, y = get_targets_and_features_from_tag(df, func_tag)
+            if X.size == 0:
+                print(
+                    f"\033[31mSkipping {func_tag}, no training data in the loaded dbs.\033[0m"
+                )  # red text
+                continue
+        else:
+            X, y = create_sample_data()
+        identifier = short_name + "_" + datetime.now().strftime("%m%d_%H%M")
+        target = os.path.join(target_path, f"{short_name}.onnx")
+        setup_model_training(identifier, target, X, y, epochs, hyperparams)
+
+
+def optuna_pipeline(
+    func_tags,
+    short_names,
+    dbs_path,
+    table_name,
+    sample_data,
+    target_path,
+    trials,
+    jobs,
+    epochs,
+    final_epochs,
+    save_state,
+    state_db,
+    study_id,
+):
+    """Main function to run the Optuna training pipeline."""
+    if not sample_data:
+        df = load_data_from_dbs(dbs_path, table_name)
+    for func_tag, short_name in zip(func_tags, short_names):
+        if not sample_data:
+            X, y = get_targets_and_features_from_tag(df, func_tag)
+            if X.size == 0:
+                print(
+                    f"\033[31mSkipping {func_tag}, no training data in the loaded dbs.\033[0m"
+                )  # red text
+                continue
+        else:
+            X, y = create_sample_data()
+        if not study_id:
+            study_id = datetime.now().strftime("%m%d_%H%M")
+        identifier = short_name + "_" + study_id
+        if save_state and not state_db:
+            state_db_path = os.path.join(CURR_DIR, "models", f"{identifier}.db")
+            state_db = f"sqlite:///{state_db_path}"
+        target = os.path.join(target_path, f"{identifier}.onnx")
+        run_optuna_study(
+            identifier, target, trials, jobs, epochs, final_epochs, X, y, state_db
+        )
