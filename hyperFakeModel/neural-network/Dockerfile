@@ -1,16 +1,11 @@
-FROM python:3.10-slim
-
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    git \
-    && rm -rf /var/lib/apt/lists/*
+FROM nvidia/cuda:12.9.1-cudnn-runtime-ubi9
 
 WORKDIR /app
 
-COPY requirements.txt .
+RUN dnf install -y python3.12
 
-RUN pip install --no-cache-dir -r requirements.txt
+COPY . /app/
 
-COPY . .
+RUN pip install -r requirements.txt
 
-CMD ["python", "neural_network_v2.py", "--optuna"]
+CMD ["./venv/bin/python", "neural_net_cli.py", "optuna", "--dbs-path", "/mnt/dbs/", "--target-path", "/mnt/dbs"]

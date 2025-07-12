@@ -7,7 +7,7 @@ from neural_network import optuna_pipeline, manual_pipeline
 
 def shared_training_options(func):
     @click.option(
-        "--dbs-path",
+        "--dbs-dir",
         type=click.Path(exists=True),
         default=os.path.normpath(
             os.path.join(os.path.dirname(__file__), "..", "training_dbs")
@@ -16,11 +16,11 @@ def shared_training_options(func):
         help="Path to directory containing database files",
     )
     @click.option(
-        "--target-path",
+        "--export-dir",
         type=click.Path(exists=True),
         default=os.path.join(os.path.dirname(__file__), "models"),
         show_default=True,
-        help="Target path for saving the trained model",
+        help="Target directory for saving the trained models",
     )
     @click.option(
         "--func-tag",
@@ -111,8 +111,8 @@ def cli():
     help="Unique ID of the study",
 )
 def optuna(
-    dbs_path,
-    target_path,
+    dbs_dir,
+    export_dir,
     func_tag,
     short_name,
     table_name,
@@ -134,10 +134,10 @@ def optuna(
     optuna_pipeline(
         func_tag,
         short_name,
-        dbs_path,
+        dbs_dir,
         table_name,
         sample_data,
-        target_path,
+        export_dir,
         trials,
         jobs,
         epochs,
@@ -163,8 +163,8 @@ def optuna(
     help="Number of training epochs",
 )
 def manual(
-    dbs_path,
-    target_path,
+    dbs_dir,
+    export_dir,
     func_tag,
     short_name,
     table_name,
@@ -177,18 +177,18 @@ def manual(
             "Number of function tags must match number of short names"
         )
     click.echo("Starting manual mode...")
-    click.echo(f"Database path: {dbs_path}")
-    click.echo(f"Target path: {target_path}")
+    click.echo(f"Database path: {dbs_dir}")
+    click.echo(f"Target path: {export_dir}")
     hyperparameters = None
     if hyperparams:
         hyperparameters = _read_and_validate_hyperparams(hyperparams)
     manual_pipeline(
         func_tag,
         short_name,
-        dbs_path,
+        dbs_dir,
         table_name,
         sample_data,
-        target_path,
+        export_dir,
         epochs,
         hyperparameters
     )

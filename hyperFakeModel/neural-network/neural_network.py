@@ -150,19 +150,19 @@ def create_sample_data(n_samples=10000):
     y = df[OUTPUT_COLS].values
     return X, y
 
-def export_model_to_onnx(model, target_path):
+def export_model_to_onnx(model, path):
     # Save the model
     model.eval()
     dummy_input = torch.zeros(1, model.input_dim)
     torch.onnx.export(
         model.to(DEVICE),
         dummy_input.to(DEVICE),
-        target_path,
+        path,
         input_names=["input"],
         output_names=["output"],
         do_constant_folding=True,  # Optimize the model
     )
-    print(f"Exported model to {target_path}.")
+    print(f"Exported model to {path}.")
 
 def plot_loss_curves(train_losses, val_losses):
     epochs = range(1, len(train_losses) + 1)
@@ -179,13 +179,13 @@ def plot_loss_curves(train_losses, val_losses):
 
     plt.pause(0.01)
 
-def load_data_from_dbs(dbs_path, table_name):
+def load_data_from_dbs(dbs_dir, table_name):
     """Load data from all SQLite databases in a directory returns a merged dataframe."""
     all_dfs = []
     query = f"SELECT {', '.join(INPUT_COLS + OUTPUT_COLS + ['function_image_tag'])} FROM {table_name}"
-    for filename in os.listdir(dbs_path):
+    for filename in os.listdir(dbs_dir):
         if filename.endswith(".db") or filename.endswith(".sqlite"):
-            db_path = os.path.join(dbs_path, filename)
+            db_path = os.path.join(dbs_dir, filename)
             df = None
             try:
                 with sqlite3.connect(db_path) as conn:
@@ -201,7 +201,7 @@ def load_data_from_dbs(dbs_path, table_name):
                 all_dfs.append(df)
     if not all_dfs:
         raise EmptyDataError(
-            f"No data loaded from any database in directory: {dbs_path}"
+            f"No data loaded from any database in directory: {dbs_dir}"
         )
     combined_df = pd.concat(all_dfs, ignore_index=True)
     # clean rows containing zero values
@@ -212,7 +212,7 @@ def load_data_from_dbs(dbs_path, table_name):
     mask = (combined_df[columns_to_clean] == 0).any(axis=1)
     cleaned_df = combined_df[~mask]
     print(
-        f"Loaded {len(cleaned_df)} rows from {len(all_dfs)} database{'s' if len(all_dfs) > 1 else ''} in directory '{dbs_path}'\n"
+        f"Loaded {len(cleaned_df)} rows from {len(all_dfs)} database{'s' if len(all_dfs) > 1 else ''} in directory '{dbs_dir}'\n"
         f"Cleaned a total of {len(combined_df) - len(cleaned_df)} rows containing zero values in any of the following columns:\n\t"
         f"{', '.join(columns_to_clean)}"
     )
@@ -462,7 +462,7 @@ def initialize_model(
 
 def setup_model_training(
     identifier,
-    target_path,
+    onnx_export_path,
     X,
     y,
     epochs,
@@ -536,7 +536,7 @@ def setup_model_training(
     print("=" * 30)
 
     # Export the model
-    export_model_to_onnx(model, target_path)
+    export_model_to_onnx(model, onnx_export_path)
 
     # Plot loss curves
     plot_loss_curves(train_losses, val_losses)
@@ -605,7 +605,7 @@ def optuna_objective(trial, X, y, epochs):
 
 
 def run_optuna_study(
-    identifier, target_path, trials, jobs, epochs, final_epochs, X, y, state_db: None
+    identifier, export_dir, trials, jobs, epochs, final_epochs, X, y, state_db: None
 ):
     """Main function to run the training pipeline with Optuna hyperparameter optimization."""
     # Wrap the objective function with partial to pass additional arguments
@@ -648,28 +648,29 @@ def run_optuna_study(
 
     # Write the best hyperparameters to a file
     hyperparams_target = os.path.join(
-        CURR_DIR, "models", f"{identifier}_hyperparams.json"
+        export_dir, f"{identifier}_hyperparams.json"
     )
     with open(hyperparams_target, "w") as f:
         json.dump(hyperparams, f, indent=4)
 
+    onnx_export_path = os.path.join(export_dir, f"{identifier}.onnx")
     # Train the model with the best hyperparameters
-    setup_model_training(identifier, target_path, X, y, final_epochs, hyperparams)
+    setup_model_training(identifier, onnx_export_path, X, y, final_epochs, hyperparams)
 
 
 def manual_pipeline(
     func_tags,
     short_names,
-    dbs_path,
+    dbs_dir,
     table_name,
     sample_data,
-    target_path,
+    export_dir,
     epochs,
     hyperparams
 ):
     """Main function to run the manual training pipeline."""
     if not sample_data:
-        df = load_data_from_dbs(dbs_path, table_name)
+        df = load_data_from_dbs(dbs_dir, table_name)
     for func_tag, short_name in zip(func_tags, short_names):
         if not sample_data:
             X, y = get_targets_and_features_from_tag(df, func_tag)
@@ -681,17 +682,17 @@ def manual_pipeline(
         else:
             X, y = create_sample_data()
         identifier = short_name + "_" + datetime.now().strftime("%m%d_%H%M")
-        target = os.path.join(target_path, f"{short_name}.onnx")
-        setup_model_training(identifier, target, X, y, epochs, hyperparams)
+        onnx_export_path = os.path.join(export_dir, f"{short_name}.onnx")
+        setup_model_training(identifier, onnx_export_path, X, y, epochs, hyperparams)
 
 
 def optuna_pipeline(
     func_tags,
     short_names,
-    dbs_path,
+    dbs_dir,
     table_name,
     sample_data,
-    target_path,
+    export_dir,
     trials,
     jobs,
     epochs,
@@ -702,7 +703,7 @@ def optuna_pipeline(
 ):
     """Main function to run the Optuna training pipeline."""
     if not sample_data:
-        df = load_data_from_dbs(dbs_path, table_name)
+        df = load_data_from_dbs(dbs_dir, table_name)
     for func_tag, short_name in zip(func_tags, short_names):
         if not sample_data:
             X, y = get_targets_and_features_from_tag(df, func_tag)
@@ -719,7 +720,6 @@ def optuna_pipeline(
         if save_state and not state_db:
             state_db_path = os.path.join(CURR_DIR, "models", f"{identifier}.db")
             state_db = f"sqlite:///{state_db_path}"
-        target = os.path.join(target_path, f"{identifier}.onnx")
         run_optuna_study(
-            identifier, target, trials, jobs, epochs, final_epochs, X, y, state_db
+            identifier, export_dir, trials, jobs, epochs, final_epochs, X, y, state_db
         )
