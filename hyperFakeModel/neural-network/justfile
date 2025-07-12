@@ -1,7 +1,187 @@
 PYTHON_FILE := "neural_network_v2.py"
+REGION :=  "europe-west1"
+JOB_NAME := "hyperfaas-training"
+BUCKET_NAME := "hyperfaas-training"
+SERVICE_ACCOUNT := "hyperfaas-training@hyperfaas-training.iam.gserviceaccount.com"
+IMAGE_NAME := "luccadibenedetto/hyperfake-training"
+DB_PATH := "benchmarks/metrics.db"
 
+TRAINING_MODE := "optuna"
+MEMORY := "16Gi"
+CPU := "4"
+GPU_TYPE := "nvidia-l4"
+GPU_COUNT := "1"
+TIMEOUT := "3600"
+
+# Show available commands
+help:
+    @echo "HyperFaaS Neural Network Training"
+    @echo "================================="
+    @echo ""
+    @echo "Local Development:"
+    @echo "  manual      - Run training locally with manual hyperparameters"
+    @echo "  optuna      - Run training locally with Optuna optimization"
+    @echo ""
+    @echo "Docker Operations:"
+    @echo "  build-image     - Build Docker image"
+    @echo "  push-image      - Push Docker image to registry"
+    @echo "  build-and-push  - Build and push image"
+    @echo ""
+    @echo "Google Cloud Setup:"
+    @echo "  enable-apis           - Enable required Google Cloud APIs"
+    @echo "  create-service-account - Create service account with permissions"
+    @echo "  delete-service-account - Delete service account"
+    @echo "  create-bucket         - Create GCS bucket"
+    @echo "  delete-bucket         - Delete GCS bucket"
+    @echo "  upload-db             - Upload database to bucket"
+    @echo ""
+    @echo "Cloud Run Operations:"
+    @echo "  create-job     - Create Cloud Run job"
+    @echo "  run-job        - Execute Cloud Run job"
+    @echo "  delete-job     - Delete Cloud Run job"
+    @echo "  get-job-status - Check job status"
+    @echo "  get-logs       - Get execution logs"
+    @echo ""
+    @echo "Model Operations:"
+    @echo "  extract-models - Download trained models from cloud"
+    @echo ""
+    @echo "Workflows:"
+    @echo "  setup        - Setup cloud resources (apis, service account, bucket)"
+    @echo "  deploy       - Build, push, upload data, create job, and run"
+    @echo "  cleanup      - Delete all cloud resources"
+    @echo "  prod-deploy  - Full production deployment"
+    @echo "  prod-cleanup - Full production cleanup"
+
+# Local development
 manual:
     python3 {{PYTHON_FILE}} --manual
 
 optuna:
     python3 {{PYTHON_FILE}} --optuna
+
+setup-dirs:
+    @echo "Creating necessary directories..."
+    mkdir -p models studies
+
+# Docker operations
+build-image:
+    docker build -t {{IMAGE_NAME}} .
+
+push-image:
+    docker push {{IMAGE_NAME}}
+
+build-and-push: build-image push-image
+
+# Google Cloud setup
+enable-apis:
+    gcloud services enable cloudbuild.googleapis.com run.googleapis.com storage.googleapis.com
+
+create-service-account:
+    #!/bin/bash
+    echo "Creating service account..."
+    PROJECT_ID=$(gcloud config get-value project)
+    SERVICE_ACCOUNT_EMAIL=hyperfaas-training@${PROJECT_ID}.iam.gserviceaccount.com
+    echo "Using project: ${PROJECT_ID}"
+    echo "Service account: ${SERVICE_ACCOUNT_EMAIL}"
+    gcloud iam service-accounts create hyperfaas-training \
+        --display-name="HyperFaaS Training Service Account" \
+        --project=${PROJECT_ID}
+    gcloud projects add-iam-policy-binding ${PROJECT_ID} \
+        --member="serviceAccount:${SERVICE_ACCOUNT_EMAIL}" \
+        --role="roles/storage.objectViewer"
+
+delete-service-account:
+    #!/bin/bash
+    echo "Deleting service account..."
+    PROJECT_ID=$(gcloud config get-value project)
+    SERVICE_ACCOUNT_EMAIL=hyperfaas-training@${PROJECT_ID}.iam.gserviceaccount.com
+    echo "Deleting service account: ${SERVICE_ACCOUNT_EMAIL}"
+    gcloud iam service-accounts delete ${SERVICE_ACCOUNT_EMAIL} --quiet
+
+create-bucket:
+    #!/bin/bash
+    echo "Creating bucket {{BUCKET_NAME}}..."
+    PROJECT_ID=$(gcloud config get-value project)
+    gsutil mb -p ${PROJECT_ID} -l {{REGION}} gs://{{BUCKET_NAME}}
+
+delete-bucket:
+    @echo "Deleting bucket {{BUCKET_NAME}}..."
+    gsutil rm -r gs://{{BUCKET_NAME}}
+
+upload-db:
+    @echo "Uploading database to bucket..."
+    gsutil cp ../../{{DB_PATH}} gs://{{BUCKET_NAME}}/dbs/
+    gsutil ls -l gs://{{BUCKET_NAME}}/dbs/
+
+# Cloud Run job operations
+create-job:
+    #!/bin/bash
+    echo "Creating Cloud Run job..."
+    echo "Getting current project ID..."
+    PROJECT_ID=$(gcloud config get-value project)
+    SERVICE_ACCOUNT_EMAIL=hyperfaas-training@${PROJECT_ID}.iam.gserviceaccount.com
+    echo "Using project: ${PROJECT_ID}"
+    echo "Service account: ${SERVICE_ACCOUNT_EMAIL}"
+    export PROJECT_ID=${PROJECT_ID} && \
+    export REGION={{REGION}} && \
+    export JOB_NAME={{JOB_NAME}} && \
+    export BUCKET_NAME={{BUCKET_NAME}} && \
+    export SERVICE_ACCOUNT=${SERVICE_ACCOUNT_EMAIL} && \
+    export IMAGE_NAME={{IMAGE_NAME}} && \
+    export TIMEOUT={{TIMEOUT}} && \
+    export MEMORY={{MEMORY}} && \
+    export CPU={{CPU}} && \
+    export GPU_COUNT={{GPU_COUNT}} && \
+    export GPU_TYPE={{GPU_TYPE}} && \
+    export TRAINING_MODE={{TRAINING_MODE}} && \
+    envsubst < job.yaml.template > job.yaml.tmp
+    gcloud run jobs replace job.yaml.tmp --region={{REGION}}
+    rm job.yaml.tmp
+
+run-job:
+    #!/bin/bash
+    echo "Starting Cloud Run job execution..."
+    EXECUTION_NAME=$(gcloud run jobs execute {{JOB_NAME}} --region={{REGION}} --format="value(metadata.name)")
+    echo "Job execution started: ${EXECUTION_NAME}"
+    echo "Checking job status..."
+    gcloud run jobs executions describe ${EXECUTION_NAME} --region={{REGION}} --format="value(status.conditions[0].type)"
+
+delete-job:
+    @echo "Deleting Cloud Run job..."
+    gcloud run jobs delete {{JOB_NAME}} --region={{REGION}} --quiet
+# Model operations
+extract-models: setup-dirs
+    @echo "Extracting trained models..."
+    -gsutil cp gs://{{BUCKET_NAME}}/app/*.onnx ./models/
+    -gsutil cp gs://{{BUCKET_NAME}}/app/*.db ./studies/
+    @echo "Models extracted to ./models/ and studies to ./studies/"
+
+# Monitoring
+get-job-status:
+    @echo "Getting job status..."
+    gcloud run jobs describe {{JOB_NAME}} --region={{REGION}} --format="value(status.conditions[0].type)"
+
+get-logs:
+    #!/bin/bash
+    t=$(date -u -d '2 minutes ago' +%Y-%m-%dT%H:%M:%SZ)
+    echo "Getting latest execution logs..."
+    gcloud logging read "resource.type=cloud_run_job AND resource.labels.job_name={{JOB_NAME}} AND timestamp >= \"${t}\"" --limit=50 --format="value(textPayload)"
+
+# Full deployment pipeline
+setup: enable-apis create-service-account create-bucket
+
+deploy: build-and-push upload-db create-job run-job
+
+cleanup: delete-job delete-bucket delete-service-account
+
+# Development workflow
+dev-test: manual
+dev-optuna: optuna
+
+# Cloud workflow  
+deploy: setup deploy
+cleanup: cleanup
+
+
+
+

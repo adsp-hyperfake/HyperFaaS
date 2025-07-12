@@ -1,0 +1,48 @@
+apiVersion: run.googleapis.com/v1
+kind: Job
+metadata:
+  name: ${JOB_NAME}
+  namespace: ${PROJECT_ID}
+  labels:
+    cloud.googleapis.com/location: ${REGION}
+  annotations:
+    run.googleapis.com/launch-stage: BETA
+spec:
+  template:
+    metadata:
+      annotations:
+        run.googleapis.com/execution-environment: gen2
+    spec:
+      parallelism: "1"
+      taskCount: "1"
+      template:
+        spec:
+          serviceAccountName: ${SERVICE_ACCOUNT}
+          containers:
+          - image: ${IMAGE_NAME}
+            imagePullPolicy: Always
+            command: ["/bin/sh"]
+            args: ["-c", "cd /app && python neural_network_v2.py --${TRAINING_MODE} --db-path /gcs/dbs"]
+            resources:
+              limits:
+                cpu: "${CPU}"
+                memory: "${MEMORY}"
+                nvidia.com/gpu: "${GPU_COUNT}"
+            env:
+            - name: GOOGLE_CLOUD_PROJECT
+              value: ${PROJECT_ID}
+            - name: BUCKET_NAME
+              value: ${BUCKET_NAME}
+            volumeMounts:
+            - name: gcs-fuse
+              mountPath: /gcs
+          timeoutSeconds: ${TIMEOUT}
+          volumes:
+          - name: gcs-fuse
+            csi:
+              driver: gcsfuse.run.googleapis.com
+              volumeAttributes:
+                bucketName: ${BUCKET_NAME}
+                mountOptions: "implicit-dirs"
+          nodeSelector:
+            run.googleapis.com/accelerator: ${GPU_TYPE} 

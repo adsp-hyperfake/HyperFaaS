@@ -13,4 +13,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-CMD ["python", "neural_network_v2.py", "--optuna"]
+CMD ["python", "neural_network_v2.py", "--optuna", "--db-path", "/dbs"]

@@ -153,15 +153,29 @@ def create_sample_data(n_samples=10000):
 
 def load_data_from_dbs(dbs_path, table_name, func_tag):
     """Load data from all SQLite databases in a directory and return features and targets as numpy arrays."""
+    print(f"Loading data from directory: {dbs_path}")
+    print(f"Looking for table: {table_name}")
+    print(f"Function tag: {func_tag}")
+    
+    if not os.path.exists(dbs_path):
+        raise FileNotFoundError(f"Directory does not exist: {dbs_path}")
+    
+    files = os.listdir(dbs_path)
+    print(f"Files in directory: {files}")
+    
     all_dfs = []
     query = f"SELECT {', '.join(INPUT_COLS + OUTPUT_COLS)} FROM {table_name} WHERE function_image_tag = '{func_tag}'"
-    for filename in os.listdir(dbs_path):
+    print(f"Query: {query}")
+    
+    for filename in files:
         if filename.endswith(".db") or filename.endswith(".sqlite"):
             db_path = os.path.join(dbs_path, filename)
+            print(f"Processing database: {db_path}")
             df = None
             try:
                 with sqlite3.connect(db_path) as conn:
                     df = pd.read_sql_query(query, conn)
+                    print(f"Loaded {len(df)} rows from {filename}")
             except Exception as e:
                 print(
                     f"{'-' * 60}\n"
@@ -171,6 +185,7 @@ def load_data_from_dbs(dbs_path, table_name, func_tag):
                 )
             if df is not None and not df.empty:
                 all_dfs.append(df)
+    
     if not all_dfs:
         raise EmptyDataError(
             f"No data loaded from any database in directory: {dbs_path}"
@@ -630,7 +645,7 @@ def main(
     plot_loss_curves(train_losses, val_losses)
 
 
-def main_manual():
+def main_manual(dbs_path=None):
     """Main function to run the training pipeline manually."""
     func_tags = [
         "hyperfaas-bfs-json:latest",
@@ -638,22 +653,30 @@ def main_manual():
         "hyperfaas-echo:latest",
     ]
     short_names = ["bfs", "thumbnailer", "echo"]
-    dbs_path = os.path.normpath(os.path.join(CURR_DIR, "..", "..", "..", "dbs"))
+    
+    # Use provided dbs_path or default to relative path
+    if dbs_path is None:
+        dbs_path = os.path.normpath(os.path.join(CURR_DIR, "..", "..", "..", "dbs"))
+    
     table_name = "training_data"
 
     for func_tag, short_name in zip(func_tags, short_names):
         X, y = load_data_from_dbs(dbs_path, table_name, func_tag)
         target_path = os.path.join(CURR_DIR, f"{short_name}.onnx")
-        main(table_name, func_tag, target_path, X=X, y=y)
+        main(func_tag, target_path, X=X, y=y)
 
 
-def main_optuna(trials=20, jobs=5):
+def main_optuna(trials=20, jobs=5, dbs_path=None):
     """Main function to run the training pipeline with Optuna hyperparameter optimization."""
     # func_tags = ["hyperfaas-bfs-json:latest", "hyperfaas-thumbnailer-json:latest", "hyperfaas-echo:latest"]
     func_tags = ["hyperfaas-thumbnailer-json:latest"]
     # short_names = ["bfs", "thumbnailer", "echo"]
     short_names = ["thumbnailer"]
-    dbs_path = os.path.normpath(os.path.join(CURR_DIR, "..", "..", "..", "dbs"))
+    
+    # default to relative path
+    if dbs_path is None:
+        dbs_path = os.path.normpath(os.path.join(CURR_DIR, "..", "..", "..", "dbs"))
+    
     table_name = "training_data"
 
     for func_tag, short_name in zip(func_tags, short_names):
@@ -720,14 +743,19 @@ if __name__ == "__main__":
         action="store_true",
         help="Run the training pipeline with Optuna hyperparameter optimization.",
     )
+    
+    parser.add_argument(
+        "--db-path",
+        type=str,
+        help="Path to the directory containing the database files. If not provided, uses default relative path.",
+    )
+    
     args = parser.parse_args()
     
-    if args.manual: {
-        main_manual()
-    }
-    elif args.optuna: {
-        main_optuna()
-    }
+    if args.manual:
+        main_manual(dbs_path=args.db_path)
+    elif args.optuna:
+        main_optuna(dbs_path=args.db_path)
     else:
         raise ValueError("Either --manual or --optuna must be specified.")
     

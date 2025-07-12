@@ -187,3 +187,5 @@ kill-db:
 kill: kill-worker kill-db
 
 
+scp-db ip  timestamp:
+    scp ubuntu@{{ip}}:/home/ubuntu/training_data/{{timestamp}}/metrics.db benchmarks/metrics.db
