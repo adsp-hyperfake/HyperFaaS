@@ -64,6 +64,7 @@ class Data:
         SELECT * FROM cpu_mem_stats
         """
         df = pd.read_sql_query(query, conn)
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
         conn.close()
         return df
     
