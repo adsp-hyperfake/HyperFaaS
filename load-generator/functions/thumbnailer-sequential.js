@@ -18,6 +18,7 @@ import {
 import { getRandomInt, isoToMs } from '../utils.js'
 import grpc from 'k6/net/grpc';
 import encoding from 'k6/encoding';
+import { sharedImageData } from '../shared-data.js';
 const client = new grpc.Client();
 client.load(['./config'], 'common.proto', 'leaf.proto');
 
@@ -34,7 +35,7 @@ export function thumbnailerFunction(setupData) {
   const height = getRandomInt(50, 200); // Random height between 50 and 200
 
   const inputData = {
-    image: setupData.imageDataB64,
+    image: sharedImageData[0], // wip: use shared image data instead of setupData
     width: width,
     height: height
   };
