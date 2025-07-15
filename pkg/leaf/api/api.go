@@ -239,12 +239,18 @@ func (s *LeafServer) callWorker(ctx context.Context, workerID state.WorkerID, fu
 		}
 		return nil, nil, err
 	}
+	var iid string
+	if resp.InstanceId != nil {
+		iid = resp.InstanceId.Id
+	} else {
+		iid = ""
+	}
 
 	callMetadata := &CallMetadata{
 		CallQueuedTimestamp:    getFirstValueOrDefault(trailer.Get("callQueuedTimestamp"), ""),
 		GotResponseTimestamp:   getFirstValueOrDefault(trailer.Get("gotResponseTimestamp"), ""),
 		FunctionProcessingTime: getFirstValueOrDefault(trailer.Get("functionProcessingTime"), ""),
-		InstanceID:             resp.InstanceId.Id,
+		InstanceID:             iid,
 	}
 
 	return &leaf.ScheduleCallResponse{Data: resp.Data, Error: resp.Error}, callMetadata, nil

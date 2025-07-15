@@ -26,27 +26,24 @@ services:
   fake-worker:
     build:
       context: .
-      dockerfile: fakeworker.Dockerfile
+      dockerfile: worker.Dockerfile
     volumes:
-      - ~/models/:/app/models/
+      - ./linear-training/models.json:/app/models/models.json
     ports:
       - "50051:50051"
     networks:
       - hyperfaas-network
-    command: ["hyperfakeworker",
-     "-m", "/app/models/${BFS_MODEL}", "hyperfaas-bfs-json",
-     "-m", "/app/models/${ECHO_MODEL}", "hyperfaas-echo",
-     "-m", "/app/models/${THUMBNAILER_MODEL}", "hyperfaas-thumbnailer-json",
-     "--address", "0.0.0.0:50051",
-     "--database-type", "http",
-     "--runtime", "docker",
-     "--timeout", "20",
+    command: ["./main",
+     "--address=0.0.0.0:50051",
+     "--database-type=http",
+     "--runtime=fake",
+     "--timeout=20",
      "--auto-remove",
-     "--log-level", "debug",
-     "--log-format", "text",
-     "--containerized",
-     "--max-rpcs", "1000000",
-     "server"]
+     "--fake-models-path=/app/models/models.json",
+     "--log-level=info",
+     "--log-format=text",
+     "--containerized=true",
+     "--update-buffer-size=100000"]
     healthcheck:
       test: ["CMD", "sleep", "5"]
       interval: 6s

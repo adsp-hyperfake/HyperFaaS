@@ -7,3 +7,4 @@ justfile
 .cache
 .git
 .idea
+*.db

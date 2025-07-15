@@ -70,11 +70,11 @@ func main() {
 	}
 
 	// Sequential calls
-	//testSequentialCalls(client, functionIDs[0])
+	testSequentialCalls(client, functionIDs[1])
 
 	// Concurrent calls for duration
 	//testConcurrentCallsForDuration(client, functionIDs[0], RPS, DURATION)
-	go testRampingCallsForDuration(client, functionIDs[0], RPS, DURATION, 60*time.Second)
+	go testRampingCallsForDuration(client, functionIDs[1], RPS, DURATION, 60*time.Second)
 	go testRampingCallsForDuration(client, functionIDs[1], RPS, DURATION, 60*time.Second)
 	//go testRampingCallsForDuration(client, functionIDs[2], RPS, DURATION, 60*time.Second)
 	time.Sleep(DURATION + 5*time.Second)

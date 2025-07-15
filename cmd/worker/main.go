@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"log"
 	"log/slog"
@@ -8,13 +9,16 @@ import (
 	"time"
 
 	kv "github.com/3s-rg-codes/HyperFaaS/pkg/keyValueStore"
+	cr "github.com/3s-rg-codes/HyperFaaS/pkg/worker/containerRuntime"
+	dockerRuntime "github.com/3s-rg-codes/HyperFaaS/pkg/worker/containerRuntime/docker"
+	fakeRuntime "github.com/3s-rg-codes/HyperFaaS/pkg/worker/containerRuntime/fake"
+	"github.com/3s-rg-codes/HyperFaaS/pkg/worker/network"
+	fakeNetwork "github.com/3s-rg-codes/HyperFaaS/pkg/worker/network/fake"
 	"github.com/3s-rg-codes/HyperFaaS/pkg/worker/stats"
 
 	"net/http"
 	_ "net/http/pprof"
 
-	cr "github.com/3s-rg-codes/HyperFaaS/pkg/worker/containerRuntime"
-	dockerRuntime "github.com/3s-rg-codes/HyperFaaS/pkg/worker/containerRuntime/docker"
 	"github.com/3s-rg-codes/HyperFaaS/pkg/worker/controller"
 )
 
@@ -26,9 +30,11 @@ type WorkerConfig struct {
 		ListenerTimeout     int    `env:"LISTENER_TIMEOUT"`
 	}
 	Runtime struct {
-		Type          string `env:"RUNTIME_TYPE"`
-		AutoRemove    bool   `env:"RUNTIME_AUTOREMOVE"`
-		Containerized bool   `env:"RUNTIME_CONTAINERIZED"`
+		Type                string `env:"RUNTIME_TYPE"`
+		AutoRemove          bool   `env:"RUNTIME_AUTOREMOVE"`
+		Containerized       bool   `env:"RUNTIME_CONTAINERIZED"`
+		FakeModelsPath      string `env:"FAKE_MODELS_PATH"`
+		FakeTimeoutDuration int    `env:"FAKE_TIMEOUT_DURATION"`
 	}
 	Log struct {
 		Level    string `env:"LOG_LEVEL"`
@@ -51,6 +57,8 @@ func parseArgs() (wc WorkerConfig) {
 	flag.StringVar(&(wc.Log.Format), "log-format", "text", "Log format (json or text) (Env: LOG_FORMAT)")
 	flag.StringVar(&(wc.Log.FilePath), "log-file", "", "Log file path (defaults to stdout) (Env: LOG_FILE)")
 	flag.BoolVar(&(wc.Runtime.Containerized), "containerized", false, "Use socket to connect to Docker. (Env: RUNTIME_CONTAINERIZED)")
+	flag.StringVar(&(wc.Runtime.FakeModelsPath), "fake-models-path", "models.json", "Path to fake runtime models file. (Env: FAKE_MODELS_PATH)")
+	flag.IntVar(&(wc.Runtime.FakeTimeoutDuration), "fake-timeout-duration", 30, "Fake container timeout duration in seconds. (Env: FAKE_TIMEOUT_DURATION)")
 	flag.Int64Var(&(wc.Stats.UpdateBufferSize), "update-buffer-size", 10000, "Update buffer size. (Env: UPDATE_BUFFER_SIZE)")
 	flag.Parse()
 	return
@@ -115,8 +123,6 @@ func main() {
 
 	logger.Info("Current configuration", "config", wc)
 
-	var runtime cr.ContainerRuntime
-
 	statsManager := stats.NewStatsManager(logger, time.Duration(wc.General.ListenerTimeout)*time.Second, 1.0, wc.Stats.UpdateBufferSize)
 
 	var dbAddress string
@@ -133,18 +139,49 @@ func main() {
 		dbClient = kv.NewHttpClient(dbAddress, logger)
 	}
 
-	// Runtime
+	var runtime cr.ContainerRuntime
+	var callRouter network.CallRouterInterface
+
 	switch wc.Runtime.Type {
 	case "docker":
 		runtime = dockerRuntime.NewDockerRuntime(wc.Runtime.Containerized, wc.Runtime.AutoRemove, wc.General.Address, logger)
+		callRouter = network.NewCallRouter(logger)
 	case "fake":
-		//runtime = mock.NewMockRuntime(logger)
+		// Load models from JSON file
+		modelsFile, err := os.Open(wc.Runtime.FakeModelsPath)
+		if err != nil {
+			logger.Error("Failed to open models file", "path", wc.Runtime.FakeModelsPath, "error", err)
+			os.Exit(1)
+		}
+		defer modelsFile.Close()
+
+		var models map[string]*fakeRuntime.FunctionModel
+		decoder := json.NewDecoder(modelsFile)
+		err = decoder.Decode(&models)
+		if err != nil {
+			logger.Error("Failed to decode models JSON", "error", err)
+			os.Exit(1)
+		}
+
+		// Create fake runtime with loaded models
+		fakeContainerRuntime, err := fakeRuntime.NewFakeContainerRuntimeWithModels(
+			models,
+			time.Duration(wc.Runtime.FakeTimeoutDuration)*time.Second,
+			logger,
+		)
+		if err != nil {
+			logger.Error("Failed to create fake container runtime", "error", err)
+			os.Exit(1)
+		}
+
+		runtime = fakeContainerRuntime
+		callRouter = fakeNetwork.NewFakeCallRouter(fakeContainerRuntime, logger)
 	default:
 		logger.Error("No runtime specified")
 		os.Exit(1)
 	}
 
-	c := controller.NewController(runtime, statsManager, logger, wc.General.Address, dbClient)
+	c := controller.NewController(runtime, statsManager, callRouter, logger, wc.General.Address, dbClient)
 
 	c.StartServer()
 }
