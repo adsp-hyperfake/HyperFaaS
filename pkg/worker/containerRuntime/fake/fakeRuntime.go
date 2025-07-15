@@ -305,7 +305,7 @@ func (f *FakeContainerRuntime) PredictFunction(imageTag string, inputs FunctionI
 	}
 
 	return FunctionPrediction{
-		Runtime:  time.Duration(runtime) * time.Nanosecond,
+		Runtime:  time.Duration(runtime) * time.Millisecond,
 		CPUUsage: cpuUsage,
 		RAMUsage: int64(ramUsage),
 	}, nil
