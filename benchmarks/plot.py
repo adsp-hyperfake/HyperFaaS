@@ -397,7 +397,7 @@ class Plotter:
         df_all["grpc_req_duration"] = df_all["grpc_req_duration"].astype(float)
         
         plt.figure(figsize=(15, 6))
-        sns.displot(df_all, x="grpc_req_duration", hue="worker_type", kind="kde", bw_adjust=0.25)
+        sns.kdeplot(data=df_all, x="grpc_req_duration", hue="worker_type", bw_adjust=0.25)
 
         plt.xlabel("Latency (ms)")
         plt.ylabel("Density")
@@ -432,7 +432,7 @@ class Plotter:
             height=4,
             aspect=1.2
         )
-        g.map(sns.displot, "grpc_req_duration", kind="kde", bw_adjust=0.25)
+        g.map(sns.kdeplot, "grpc_req_duration", bw_adjust=0.25)
         g.add_legend(title="Run")
         g.set_axis_labels("Latency (ms)", "Density")
         g.set_titles("{col_name}")
