@@ -334,8 +334,9 @@ class Plotter:
             df_cpu
             .assign(second=lambda d: d["timestamp"].dt.floor("s"))
             .groupby(["worker_type", "second"])
-            .sum()
-            .reset_index(name="cpu_usage_total_sum")
+            .agg({"cpu_usage_total": "sum"})
+            .reset_index()
+            .rename(columns={"cpu_usage_total": "cpu_usage_total_sum"})
         )
 
         plt.figure(figsize=(15, 6))
@@ -366,8 +367,9 @@ class Plotter:
             df_memory
             .assign(second=lambda d: d["timestamp"].dt.floor("s"))
             .groupby(["worker_type", "second"])
-            .sum()
-            .reset_index(name="memory_usage_sum")
+            .agg({"memory_usage": "sum"})
+            .reset_index()
+            .rename(columns={"memory_usage": "memory_usage_sum"})
         )
         
         plt.figure(figsize=(15, 6))
