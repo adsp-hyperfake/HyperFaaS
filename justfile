@@ -194,7 +194,7 @@ run-full-pipeline time="1m" total_runs="3" address="localhost:50050":
     mv ./benchmarks/plots/* ~/training_data/${timestamp}/plots/
 
 run-seeded-workload time="1m" total_runs="3" address="localhost:50050" prefix="":
-    just load-generator/generate-seeds {{total_runs}}
+    echo "Make sure to have generated seeds.txt in load-generator/seeds.txt"
     just load-generator/register-functions {{address}}
     ulimit -n 250000 &&just load-generator/run-sequential {{total_runs}} {{time}} {{address}} true
 
