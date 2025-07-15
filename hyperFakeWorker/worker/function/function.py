@@ -114,9 +114,14 @@ class Function(AbstractFunction):
         return self.instance_id.__hash__()
     
     @staticmethod
-    def create_new(function_manager: FunctionManager, status_manager: StatusManager, function_id: str, image: FunctionImage, model: Path) -> "Function":
-        if model is None:
-            raise ValueError(f"model cannot be None!")
+    def create_new(function_manager: FunctionManager, status_manager: StatusManager, function_id: str, image: FunctionImage, model_path: Path, model_manager: "ModelManager") -> "Function":
+        if model_path is None:
+            raise ValueError(f"model_path cannot be None!")
+        if model_manager is None:
+            raise ValueError(f"model_manager cannot be None!")
+            
+        cached_model = model_manager.get_cached_model(model_path)
+        
         hash_source = function_id + str(random.randint(1, 2**31))
         return Function(
             function_manager=function_manager,
@@ -125,5 +130,5 @@ class Function(AbstractFunction):
             function_id=function_id,
             instance_id=sha256(hash_source.encode(errors="ignore")).hexdigest()[0:12],
             image=image,
-            model=FunctionModelInferer(model)
+            model=cached_model
         )

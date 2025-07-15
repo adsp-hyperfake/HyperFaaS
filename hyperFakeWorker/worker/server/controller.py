@@ -37,7 +37,7 @@ class ControllerServicer(controller_pb2_grpc.ControllerServicer):
 
         function_image = self._image_manager.get_image(request.id)
         model_path = self._model_manager.find_model(request.id, function_image)
-        new_function = Function.create_new(self._function_manager, self._status_manager, request.id, function_image, model_path)
+        new_function = Function.create_new(self._function_manager, self._status_manager, request.id, function_image, model_path, self._model_manager)
 
         self._function_manager.add_function(new_function)
 

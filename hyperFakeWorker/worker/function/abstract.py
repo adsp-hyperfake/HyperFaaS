@@ -47,7 +47,7 @@ class AbstractFunction(ABC):
 
     @staticmethod
     @abstractmethod
-    def create_new(manager: "FunctionManager", function_id: str, image: FunctionImage, model: Path) -> "AbstractFunction":
+    def create_new(manager: "FunctionManager", status_manager: "StatusManager", function_id: str, image: FunctionImage, model_path: Path, model_manager: "ModelManager") -> "AbstractFunction":
         pass
     
     @abstractmethod
