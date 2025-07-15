@@ -69,6 +69,8 @@ func main() {
 		} */
 	}
 
+	testCallWithSleep(client, functionIDs[1], 20*time.Second)
+
 	// Sequential calls
 	testSequentialCalls(client, functionIDs[1])
 
