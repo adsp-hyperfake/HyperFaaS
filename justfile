@@ -193,6 +193,18 @@ run-full-pipeline time="1m" total_runs="3" address="localhost:50050":
     mkdir -p ~/training_data/${timestamp}/plots
     mv ./benchmarks/plots/* ~/training_data/${timestamp}/plots/
 
+run-seeded-workload time="1m" total_runs="3" address="localhost:50050" prefix="":
+    just load-generator/generate-seeds {{total_runs}}
+    just load-generator/register-functions {{address}}
+    just load-generator/run-sequential {{total_runs}} {{time}} {{address}} true
+
+    ../pull_metrics.sh
+    just load-generator/export-sequential
+
+    mkdir -p ~/model-runs/${prefix}
+    mv ./benchmarks/metrics.db ~/model-runs/${prefix}/metrics.db
+    mv ./load-generator/generated_scenarios_*.json ~/model-runs/${prefix}/
+
 allow-reuse-connections:
     # Allow reusing TIME_WAIT sockets for new connections when safe
     sudo sysctl -w net.ipv4.tcp_tw_reuse=1
