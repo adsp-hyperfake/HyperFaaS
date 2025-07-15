@@ -130,12 +130,16 @@ def main():
             print(f"\n=== plotting for run '{metrics_list[0]['worker_type'].iat[0]}' ===")
             plotter.plot_throughput_leaf_node(metrics_list[0])
             plotter.plot_decomposed_latency(metrics_list[0])
+            plotter.plot_latency_distribution(metrics_list[0])
+            plotter.plot_latency_distribution_per_image(metrics_list[0])
             plotter.plot_cpu_usage_total(cpu_metrics_list[0])
             plotter.plot_memory_usage_total(cpu_metrics_list[0])
         else:
             runs = {df["worker_type"].iat[0]: df for df in metrics_list}
             plotter.plot_latency_rps_comparison(runs)
             plotter.plot_latency_ecdf_per_image(runs, cols=3)
+            plotter.plot_latency_distribution(runs)
+            plotter.plot_latency_distribution_per_image(runs)
             runs_cpu = {df["worker_type"].iat[0]: df for df in cpu_metrics_list}
             plotter.plot_cpu_usage_total(runs_cpu)
             plotter.plot_memory_usage_total(runs_cpu)
