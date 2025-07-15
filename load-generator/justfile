@@ -37,7 +37,7 @@ run-sequential total_runs="10" run_duration="2m" address="localhost:50050" use_s
 	THUMBNAILER_FUNCTION_ID=$(jq -r '.functionIds.thumbnailer' function_ids.json)
 
 	if [ "$use_seeds" = "true" ]; then
-		seeds=$(cat seeds.txt)
+		seeds=($(cat seeds.txt))
 	else
 		seeds=($(shuf -i 1-1000000 -n $total_runs))
 	fi
@@ -45,7 +45,7 @@ run-sequential total_runs="10" run_duration="2m" address="localhost:50050" use_s
 	# Run sequential workloads
 	for ((i=1; i<=total_runs; i++)); do
 		echo "Running workload $i/$total_runs..."
-		seed=${seeds[$i]}
+		seed=${seeds[$((i-1))]}
 		k6 run \
 		--quiet \
 		--out csv=test_results_run_${i}.csv \
