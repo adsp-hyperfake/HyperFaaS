@@ -133,6 +133,8 @@ def main():
             runs = {df["worker_type"].iat[0]: df for df in metrics_list}
             plotter.plot_latency_rps_comparison(runs)
             plotter.plot_latency_ecdf_per_image(runs, cols=3)
+            plotter.plot_cpu_usage_total(runs)
+            plotter.plot_memory_usage_total(runs)
 
 if __name__ == "__main__":
     main() 
