@@ -120,21 +120,25 @@ def main():
 
     if args.db_paths and args.plot:
         metrics_list = []
+        cpu_metrics_list = []
         for path in args.db_paths:
             label = os.path.splitext(os.path.basename(path))[0]
             df = d.load_metrics_labeled(path, label=label)
             metrics_list.append(df)
-
+            cpu_metrics_list.append(d.load_cpu_mem_stats_labeled(path, label=label))
         if len(metrics_list) == 1:
             print(f"\n=== plotting for run '{metrics_list[0]['worker_type'].iat[0]}' ===")
             plotter.plot_throughput_leaf_node(metrics_list[0])
             plotter.plot_decomposed_latency(metrics_list[0])
+            plotter.plot_cpu_usage_total(cpu_metrics_list[0])
+            plotter.plot_memory_usage_total(cpu_metrics_list[0])
         else:
             runs = {df["worker_type"].iat[0]: df for df in metrics_list}
             plotter.plot_latency_rps_comparison(runs)
             plotter.plot_latency_ecdf_per_image(runs, cols=3)
-            plotter.plot_cpu_usage_total(runs)
-            plotter.plot_memory_usage_total(runs)
+            runs_cpu = {df["worker_type"].iat[0]: df for df in cpu_metrics_list}
+            plotter.plot_cpu_usage_total(runs_cpu)
+            plotter.plot_memory_usage_total(runs_cpu)
 
 if __name__ == "__main__":
     main() 

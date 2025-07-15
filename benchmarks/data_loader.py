@@ -56,6 +56,22 @@ class Data:
         
         self.metrics = df
         return df
+    
+    def load_cpu_mem_stats(self, db_path: str) -> pd.DataFrame:
+        """Get CPU and memory usage stats for each worker."""
+        conn = sqlite3.connect(db_path)
+        query = """
+        SELECT * FROM cpu_mem_stats
+        """
+        df = pd.read_sql_query(query, conn)
+        conn.close()
+        return df
+    
+    def load_cpu_mem_stats_labeled(self, db_path: str, label: str) -> pd.DataFrame:
+        """Convenience wrapper around load_cpu_mem_stats that adds a column identifying the worker implementation (e.g. 'original' or 'model')."""
+        df = self.load_cpu_mem_stats(db_path).copy()
+        df["worker_type"] = label
+        return df
 
     def load_metrics_labeled(self, db_path: str, label: str) -> pd.DataFrame:
         """Convenience wrapper around load_metrics that adds a column identifying the worker implementation (e.g. 'original' or 'model')."""
