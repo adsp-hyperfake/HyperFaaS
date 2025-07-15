@@ -186,10 +186,12 @@ export function setup() {
   console.log("bfs", data[1].metadata.bfsFunctionId)
   console.log("echo", data[1].metadata.echoFunctionId)
   console.log("thumbnailer", data[1].metadata.thumbnailerFunctionId)
-  const imageDataB64 = encoding.b64encode(http.get("https://picsum.photos/200/300").body,
-  {
-    responseType: 'binary',
-  });
+  const imageDataB64 = encoding.b64encode(http.get("https://picsum.photos/200/300",
+    {
+      responseType: 'binary',
+    }
+  ).body,
+  );
   return {
     timeout: data[0].functionTimeoutSeconds,
     address: data[0].address,
