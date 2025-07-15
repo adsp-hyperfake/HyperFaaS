@@ -45,6 +45,7 @@ services:
      "--log-level", "debug",
      "--log-format", "text",
      "--containerized",
+     "--max-rpcs", "1000000",
      "server"]
     healthcheck:
       test: ["CMD", "sleep", "5"]
