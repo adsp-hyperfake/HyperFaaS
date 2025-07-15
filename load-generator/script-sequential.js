@@ -186,7 +186,10 @@ export function setup() {
   console.log("bfs", data[1].metadata.bfsFunctionId)
   console.log("echo", data[1].metadata.echoFunctionId)
   console.log("thumbnailer", data[1].metadata.thumbnailerFunctionId)
-  const imageDataB64 = encoding.b64encode(http.get("https://picsum.photos/200/300").body);
+  const imageDataB64 = encoding.b64encode(http.get("https://picsum.photos/200/300").body,
+  {
+    responseType: 'binary',
+  });
   return {
     timeout: data[0].functionTimeoutSeconds,
     address: data[0].address,
@@ -199,6 +202,7 @@ export function setup() {
 }
 
 export const options = {
+  discardResponseBodies: true,
   scenarios: data[2],
   systemTags: ['error', 'group', 'proto', 'scenario', 'service', 'subproto', 'extra_tags', 'metadata', 'vu', 'iter']
 };

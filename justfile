@@ -172,7 +172,7 @@ run-full-pipeline time="1m" total_runs="3" address="localhost:50050":
     #!/bin/bash
     # run the load generation
     just load-generator/register-functions {{address}}
-    just load-generator/run-sequential {{total_runs}} {{time}} {{address}}
+    ulimit -n 250000 && just load-generator/run-sequential {{total_runs}} {{time}} {{address}}
     # call pull metrics script : this will fail unless you have it locally
     # This script lives outside the repo - its infra specific
     ../pull_metrics.sh
@@ -196,7 +196,7 @@ run-full-pipeline time="1m" total_runs="3" address="localhost:50050":
 run-seeded-workload time="1m" total_runs="3" address="localhost:50050" prefix="":
     just load-generator/generate-seeds {{total_runs}}
     just load-generator/register-functions {{address}}
-    just load-generator/run-sequential {{total_runs}} {{time}} {{address}} true
+    ulimit -n 250000 &&just load-generator/run-sequential {{total_runs}} {{time}} {{address}} true
 
     ../pull_metrics.sh
     just load-generator/export-sequential
