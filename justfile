@@ -172,7 +172,7 @@ run-full-pipeline time="1m" total_runs="3" address="localhost:50050":
     #!/bin/bash
     # run the load generation
     just load-generator/register-functions {{address}}
-    just load-generator/run-sequential {{total_runs}} {{time}} {{address}}
+    ulimit -n 250000 && just load-generator/run-sequential {{total_runs}} {{time}} {{address}}
     # call pull metrics script : this will fail unless you have it locally
     # This script lives outside the repo - its infra specific
     ../pull_metrics.sh
@@ -192,6 +192,18 @@ run-full-pipeline time="1m" total_runs="3" address="localhost:50050":
     mv ./load-generator/generated_scenarios_*.json ~/training_data/${timestamp}/
     mkdir -p ~/training_data/${timestamp}/plots
     mv ./benchmarks/plots/* ~/training_data/${timestamp}/plots/
+
+run-seeded-workload time="1m" total_runs="3" address="localhost:50050" prefix="":
+    echo "Make sure to have generated seeds.txt in load-generator/seeds.txt"
+    just load-generator/register-functions {{address}}
+    ulimit -n 250000 &&just load-generator/run-sequential {{total_runs}} {{time}} {{address}} true
+
+    ../pull_metrics.sh
+    just load-generator/export-sequential
+
+    mkdir -p ~/model-runs/${prefix}
+    mv ./benchmarks/metrics.db ~/model-runs/${prefix}/metrics.db
+    mv ./load-generator/generated_scenarios_*.json ~/model-runs/${prefix}/
 
 allow-reuse-connections:
     # Allow reusing TIME_WAIT sockets for new connections when safe
