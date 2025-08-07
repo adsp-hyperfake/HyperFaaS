@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"log"
 	"log/slog"
@@ -146,32 +145,27 @@ func main() {
 	case "docker":
 		runtime = dockerRuntime.NewDockerRuntime(wc.Runtime.Containerized, wc.Runtime.AutoRemove, wc.General.Address, logger)
 		callRouter = network.NewCallRouter(logger)
-	case "fake":
+	case "fake-linear":
 		// Load models from JSON file
-		modelsFile, err := os.Open(wc.Runtime.FakeModelsPath)
+		linearModels, err := fakeRuntime.LoadModels(wc.Runtime.FakeModelsPath)
+
 		if err != nil {
-			logger.Error("Failed to open models file", "path", wc.Runtime.FakeModelsPath, "error", err)
+			logger.Error("Failed to load models", "error", err)
 			os.Exit(1)
 		}
-		defer modelsFile.Close()
 
-		var models map[string]*fakeRuntime.FunctionModel
-		decoder := json.NewDecoder(modelsFile)
-		err = decoder.Decode(&models)
-		if err != nil {
-			logger.Error("Failed to decode models JSON", "error", err)
-			os.Exit(1)
+		models := make(map[string]fakeRuntime.FunctionModel)
+		for k, v := range linearModels {
+			models[k] = &v
 		}
 
 		// Create fake runtime with loaded models
-		fakeContainerRuntime, err := fakeRuntime.NewFakeContainerRuntimeWithModels(
-			models,
-			time.Duration(wc.Runtime.FakeTimeoutDuration)*time.Second,
-			logger,
-		)
-		if err != nil {
-			logger.Error("Failed to create fake container runtime", "error", err)
-			os.Exit(1)
+		fakeContainerRuntime := &fakeRuntime.FakeContainerRuntime{
+			Models: fakeRuntime.FakeModels{
+				Models: models,
+			},
+			TimeoutDuration: time.Duration(wc.Runtime.FakeTimeoutDuration) * time.Second,
+			Logger:          logger,
 		}
 
 		runtime = fakeContainerRuntime
