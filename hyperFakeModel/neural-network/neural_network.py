@@ -23,14 +23,6 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 torch.manual_seed(42)
 np.random.seed(42)
 
-INPUT_COLS = [
-    "request_body_size",
-    "function_instances_count",
-    "active_function_calls_count",
-    "worker_cpu_usage",
-    "worker_ram_usage",
-]
-OUTPUT_COLS = ["function_runtime", "function_cpu_usage", "function_ram_usage"]
 CURR_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -129,7 +121,7 @@ class MLP(nn.Module):
             self.output_scale.copy_(output_scale_tensor)
 
 
-def create_sample_data(n_samples=10000):
+def create_sample_data(input_cols, output_cols, n_samples=10000):
     """Create sample data for demonstration purposes"""
     # Just for testing. This will obviously lead to a terrible model evaluation since it's all random!
     data = {
@@ -143,8 +135,8 @@ def create_sample_data(n_samples=10000):
         "function_ram_usage": np.random.randint(1, 10, n_samples),
     }
     df = pd.DataFrame(data)
-    X = df[INPUT_COLS].values
-    y = df[OUTPUT_COLS].values
+    X = df[input_cols].values
+    y = df[output_cols].values
     return X, y
 
 
@@ -179,10 +171,10 @@ def plot_loss_curves(train_losses, val_losses):
     plt.pause(0.01)
 
 
-def load_data_from_dbs(dbs_dir, table_name):
+def load_data_from_dbs(dbs_dir, table_name, input_cols, output_cols):
     """Load data from all SQLite databases in a directory returns a merged dataframe."""
     all_dfs = []
-    query = f"SELECT {', '.join(INPUT_COLS + OUTPUT_COLS + ['function_image_tag'])} FROM {table_name}"
+    query = f"SELECT {', '.join(input_cols + output_cols + ['function_image_tag'])} FROM {table_name}"
     for filename in os.listdir(dbs_dir):
         if filename.endswith(".db") or filename.endswith(".sqlite"):
             db_path = os.path.join(dbs_dir, filename)
@@ -207,7 +199,7 @@ def load_data_from_dbs(dbs_dir, table_name):
     # clean rows containing zero values
     safe_columns = ["active_function_calls_count", "function_instances_count"]
     columns_to_clean = [
-        column for column in INPUT_COLS + OUTPUT_COLS if column not in safe_columns
+        column for column in input_cols + output_cols if column not in safe_columns
     ]
     mask = (combined_df[columns_to_clean] == 0).any(axis=1)
     cleaned_df = combined_df[~mask]
@@ -219,13 +211,13 @@ def load_data_from_dbs(dbs_dir, table_name):
     return cleaned_df
 
 
-def get_targets_and_features_from_tag(df, image_tag, samples):
+def get_targets_and_features_from_tag(df, image_tag, samples, input_cols, output_cols):
     """Takes a dataframe and returns only the rows for the relevant image tag."""
     image_tag_data_only = df[df["function_image_tag"] == image_tag]
     if samples > 0:
         image_tag_data_only = image_tag_data_only.sample(n=samples, random_state=42)
-    X = image_tag_data_only[INPUT_COLS].values
-    y = image_tag_data_only[OUTPUT_COLS].values
+    X = image_tag_data_only[input_cols].values
+    y = image_tag_data_only[output_cols].values
     print(f"Loaded {len(X)} data points for image {image_tag}.")
     return X, y
 
@@ -471,6 +463,7 @@ def setup_model_training(
     X,
     y,
     epochs,
+    output_cols,
     hyperparams=None,
 ):
     """Trains the model."""
@@ -492,6 +485,8 @@ def setup_model_training(
             "patience": 10,
             "optimizer": "Adam",
         }
+
+    print(hyperparams)
 
     train_loader, val_loader, test_loader, train_dataset = prepare_dataloaders(
         X_train, y_train, X_val, y_val, hyperparams["batch_size"], X_test, y_test
@@ -531,7 +526,7 @@ def setup_model_training(
     test_loss, test_predictions, test_targets = evaluate_model(
         model, test_loader, criterion
     )
-    test_metrics = calculate_metrics(test_targets, test_predictions, OUTPUT_COLS)
+    test_metrics = calculate_metrics(test_targets, test_predictions, output_cols)
 
     # Print test results
     print("=" * 30)
@@ -612,7 +607,7 @@ def optuna_objective(trial, X, y, epochs):
 
 
 def run_optuna_study(
-    identifier, export_dir, trials, jobs, epochs, final_epochs, X, y, state_db: None
+    identifier, export_dir, trials, jobs, epochs, final_epochs, X, y, output_cols, state_db: None
 ):
     """Main function to run the training pipeline with Optuna hyperparameter optimization."""
     # Wrap the objective function with partial to pass additional arguments
@@ -656,7 +651,7 @@ def run_optuna_study(
     onnx_export_path = os.path.join(export_dir, f"{identifier}.onnx")
     # Train the model with the best hyperparameters
     val_score_final_training = setup_model_training(
-        identifier, onnx_export_path, X, y, final_epochs, hyperparams
+        identifier, onnx_export_path, X, y, final_epochs, hyperparams, output_cols
     )
 
     # Write the best hyperparameters to a file
@@ -680,23 +675,25 @@ def manual_pipeline(
     epochs,
     hyperparams,
     samples,
+    input_cols,
+    output_cols,
 ):
     """Main function to run the manual training pipeline."""
     if not sample_data:
-        df = load_data_from_dbs(dbs_dir, table_name)
+        df = load_data_from_dbs(dbs_dir, table_name, input_cols, output_cols)
     for func_tag, short_name in zip(func_tags, short_names):
         if not sample_data:
-            X, y = get_targets_and_features_from_tag(df, func_tag, samples)
+            X, y = get_targets_and_features_from_tag(df, func_tag, samples, input_cols, output_cols)
             if X.size == 0:
                 print(
                     f"\033[31mSkipping {func_tag}, no training data in the loaded dbs.\033[0m"
                 )  # red text
                 continue
         else:
-            X, y = create_sample_data()
+            X, y = create_sample_data(input_cols=input_cols, output_cols=output_cols)
         identifier = short_name + "_" + datetime.now().strftime("%m%d_%H%M")
         onnx_export_path = os.path.join(export_dir, f"{short_name}.onnx")
-        setup_model_training(identifier, onnx_export_path, X, y, epochs, hyperparams)
+        setup_model_training(identifier, onnx_export_path, X, y, epochs, output_cols, hyperparams)
 
 
 def optuna_pipeline(
@@ -714,12 +711,14 @@ def optuna_pipeline(
     save_state,
     state_db,
     study_id,
+    input_cols,
+    output_cols,
 ):
     """Main function to run the Optuna training pipeline."""
     for func_tag, short_name in zip(func_tags, short_names):
         if not sample_data:
-            df = load_data_from_dbs(dbs_dir, table_name)
-            X, y = get_targets_and_features_from_tag(df, func_tag, samples)
+            df = load_data_from_dbs(dbs_dir, table_name, input_cols, output_cols)
+            X, y = get_targets_and_features_from_tag(df, func_tag, samples, input_cols, output_cols)
             del df  # force garbage collector
             if X.size == 0:
                 print(
@@ -727,7 +726,7 @@ def optuna_pipeline(
                 )  # red text
                 continue
         else:
-            X, y = create_sample_data()
+            X, y = create_sample_data(input_cols=input_cols, output_cols=output_cols)
         if not study_id:
             study_id = datetime.now().strftime("%m%d_%H%M")
         identifier = short_name + "_" + study_id
@@ -735,5 +734,5 @@ def optuna_pipeline(
             state_db_path = os.path.join(CURR_DIR, "models", f"{identifier}.db")
             state_db = f"sqlite:///{state_db_path}"
         run_optuna_study(
-            identifier, export_dir, trials, jobs, epochs, final_epochs, X, y, state_db
+            identifier, export_dir, trials, jobs, epochs, final_epochs, X, y, output_cols, state_db
         )

@@ -52,6 +52,30 @@ def shared_training_options(func):
         default=False,
         help="Use sample data instead of real data",
     )
+    @click.option(
+        "--input-cols",
+        multiple=True,
+        show_default=True,
+        default=(
+            "request_body_size",
+            "function_instances_count",
+            "active_function_calls_count",
+            "worker_cpu_usage",
+            "worker_ram_usage",
+        ),
+        help="Input columns for training (can be specified multiple times)",
+    )
+    @click.option(
+        "--output-cols",
+        multiple=True,
+        show_default=True,
+        default=(
+            "function_runtime",
+            "function_cpu_usage",
+            "function_ram_usage",
+        ),
+        help="Output columns for training (can be specified multiple times)"
+    )
     @wraps(func)
     def wrapper(*args, **kwargs):
         return func(*args, **kwargs)
@@ -131,6 +155,8 @@ def optuna(
     save_state,
     shared_db,
     study_id,
+    input_cols,
+    output_cols,
 ):
     if len(func_tag) != len(short_name):
         raise click.ClickException(
@@ -153,6 +179,8 @@ def optuna(
         save_state,
         shared_db,
         study_id,
+        list(input_cols),
+        list(output_cols),
     )
 
 
@@ -186,6 +214,8 @@ def manual(
     hyperparams,
     epochs,
     samples,
+    input_cols,
+    output_cols,
 ):
     if len(func_tag) != len(short_name):
         raise click.ClickException(
@@ -207,6 +237,8 @@ def manual(
         epochs,
         hyperparameters,
         samples,
+        list(input_cols),
+        list(output_cols),
     )
 
 
