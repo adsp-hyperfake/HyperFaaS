@@ -3,6 +3,7 @@ package fake
 import (
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -209,36 +210,19 @@ func (f *FakeCallRouter) getCurrentWorkerRAM() int64 {
 func (f *FakeCallRouter) generateFakeResponse(imageTag string, requestData []byte) []byte {
 	// Generate fake responses based on function type
 	switch {
-	case contains(imageTag, "hello"):
+	case strings.Contains(imageTag, "hello"):
 		return []byte("Hello, World!")
-	case contains(imageTag, "echo"):
+	case strings.Contains(imageTag, "echo"):
 		return requestData // Echo back the request
-	case contains(imageTag, "thumbnailer"):
+	case strings.Contains(imageTag, "thumbnailer"):
 		// Simulate thumbnail generation - return fake image data
 		return []byte("fake-thumbnail-data-" + string(requestData))
-	case contains(imageTag, "bfs"):
+	case strings.Contains(imageTag, "bfs"):
 		// Simulate BFS result
 		return []byte(`{"result": "fake-bfs-path", "steps": 42}`)
-	case contains(imageTag, "sleep"):
+	case strings.Contains(imageTag, "sleep"):
 		return []byte("slept successfully")
 	default:
 		return []byte("fake-response-" + string(requestData))
 	}
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr ||
-		(len(s) > len(substr) &&
-			(s[:len(substr)] == substr ||
-				s[len(s)-len(substr):] == substr ||
-				indexOf(s, substr) >= 0)))
-}
-
-func indexOf(s, substr string) int {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
-	}
-	return -1
 }
