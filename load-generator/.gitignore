@@ -1,3 +1,4 @@
 *.csv
 *generated_scenarios*
 function_ids.json
+seeds.txt

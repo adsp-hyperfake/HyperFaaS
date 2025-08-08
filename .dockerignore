@@ -7,3 +7,9 @@ justfile
 .cache
 .git
 .idea
+*.db
+benchmarks/
+hyperFakeModels/
+linear-training/
+load-generator/
+log/

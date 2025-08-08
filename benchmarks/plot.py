@@ -311,3 +311,138 @@ class Plotter:
             out = os.path.join(self.save_path, f"{self.prefix}latency_ecdf_per_image_multi.png")
             g.fig.savefig(out)
         plt.close(g.fig)
+
+    def plot_cpu_usage_total(self, runs: Mapping[str, pd.DataFrame]):
+        """Plot the total CPU usage of the system."""
+        print("Plotting total CPU usage...")
+        
+        tagged = []
+        for label, df in runs.items():
+            df2 = df.copy()
+            if "worker_type" in df2:
+                df2["worker_type"] = label
+            else:
+                df2 = df2.rename_axis(None, axis=1)
+                df2["worker_type"] = label
+            tagged.append(df2)
+        df_all = pd.concat(tagged, ignore_index=True, sort=False)
+
+        df_cpu = df_all[df_all["cpu_usage_total"].notna()].copy()
+        df_cpu["cpu_usage_total"] = df_cpu["cpu_usage_total"].astype(float)
+
+        df_cpu_sum = (
+            df_cpu
+            .assign(second=lambda d: d["timestamp"].dt.floor("s"))
+            .groupby(["worker_type", "second"])
+            .agg({"cpu_usage_total": "sum"})
+            .reset_index()
+            .rename(columns={"cpu_usage_total": "cpu_usage_total_sum"})
+        )
+
+        plt.figure(figsize=(15, 6))
+        sns.lineplot(data=df_cpu_sum, x="second", y="cpu_usage_total_sum", hue="worker_type", linewidth=2)
+        plt.ylabel("CPU Usage (%)")
+        plt.title("Total CPU Usage Over Time – " + ", ".join(runs.keys()))
+        self._save_or_show("cpu_usage_total_multi")
+       
+    def plot_memory_usage_total(self, runs: Mapping[str, pd.DataFrame]):
+        """Plot the total memory usage of the system."""
+        print("Plotting total memory usage...")
+        
+        tagged = []
+        for label, df in runs.items():
+            df2 = df.copy()
+            if "worker_type" in df2:
+                df2["worker_type"] = label
+            else:
+                df2 = df2.rename_axis(None, axis=1)
+                df2["worker_type"] = label
+            tagged.append(df2)
+        df_all = pd.concat(tagged, ignore_index=True, sort=False)
+
+        df_memory = df_all[df_all["memory_usage"].notna()].copy()
+        df_memory["memory_usage"] = df_memory["memory_usage"].astype(float) / 1024 / 1024 # convert to MB
+
+        df_memory_sum = (
+            df_memory
+            .assign(second=lambda d: d["timestamp"].dt.floor("s"))
+            .groupby(["worker_type", "second"])
+            .agg({"memory_usage": "sum"})
+            .reset_index()
+            .rename(columns={"memory_usage": "memory_usage_sum"})
+        )
+        
+        plt.figure(figsize=(15, 6))
+        sns.lineplot(data=df_memory_sum, x="second", y="memory_usage_sum", hue="worker_type", linewidth=2)
+        plt.ylabel("Memory Usage (MB)")
+        plt.title("Total Memory Usage Over Time – " + ", ".join(runs.keys()))
+        self._save_or_show("memory_usage_total_multi")
+
+    def plot_latency_distribution(self, runs: Mapping[str, pd.DataFrame]):
+        """Plot the latency distribution of the system."""
+        print("Plotting latency distribution...")
+        
+        tagged = []
+        for label, df in runs.items():
+            df2 = df.copy()
+            if "worker_type" in df2:
+                df2["worker_type"] = label
+            else:
+                df2 = df2.rename_axis(None, axis=1)
+                df2["worker_type"] = label
+            tagged.append(df2)
+        df_all = pd.concat(tagged, ignore_index=True, sort=False)
+
+        df_all = df_all[df_all["grpc_req_duration"].notna()].copy()
+        df_all["grpc_req_duration"] = df_all["grpc_req_duration"].astype(float)
+        
+        plt.figure(figsize=(15, 6))
+        sns.kdeplot(data=df_all, x="grpc_req_duration", hue="worker_type", bw_adjust=0.25)
+
+        plt.xlabel("Latency (ms)")
+        plt.ylabel("Density")
+        plt.title("Latency Distribution – " + ", ".join(runs.keys()))
+        self._save_or_show("latency_distribution_multi")
+
+    def plot_latency_distribution_per_image(self, runs: Mapping[str, pd.DataFrame]):
+        """Plot the latency distribution per image_tag."""
+        print("Plotting latency distribution per image_tag...")
+
+        tagged = []
+        for label, df in runs.items():
+            df2 = df.copy()
+            if "worker_type" in df2:
+                df2["worker_type"] = label
+            else:
+                df2 = df2.rename_axis(None, axis=1)
+                df2["worker_type"] = label
+            tagged.append(df2)
+        df_all = pd.concat(tagged, ignore_index=True, sort=False)
+
+        df_all = df_all[df_all["grpc_req_duration"].notna()].copy()
+        df_all["grpc_req_duration"] = df_all["grpc_req_duration"].astype(float)
+
+        g = sns.FacetGrid(
+            df_all,
+            col="image_tag",
+            hue="worker_type",
+            col_wrap=3,
+            sharex=True,
+            sharey=True,
+            height=4,
+            aspect=1.2
+        )
+        g.map(sns.kdeplot, "grpc_req_duration", bw_adjust=0.25)
+        g.add_legend(title="Run")
+        g.set_axis_labels("Latency (ms)", "Density")
+        g.set_titles("{col_name}")
+        g.fig.suptitle("Latency Distribution per Image – " + ", ".join(runs.keys()), fontsize=14)
+
+        if self.show:
+            plt.show()
+        if self.save:
+            os.makedirs(self.save_path, exist_ok=True)
+            out = os.path.join(self.save_path, f"{self.prefix}latency_distribution_per_image_multi.png")
+            g.fig.savefig(out)
+        plt.close(g.fig)
+        

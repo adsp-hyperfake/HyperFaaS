@@ -17,6 +17,8 @@ class FunctionManager():
         self.instanceId_to_instance_map: dict[InstanceIdStr, AbstractFunction] = {}
         # function_id : set[Function]
         self.functionId_to_instances_map: dict[FunctionIdStr, WeakSet[AbstractFunction]] = {}
+        # Round-robin state tracking
+        self.round_robin_index: dict[FunctionIdStr, int] = {}
 
     @property
     def avg_remaining_runtime(self) -> float:
@@ -64,6 +66,29 @@ class FunctionManager():
     def num_functions(self) -> int:
         return len(self.instanceId_to_instance_map.values())
 
+    def get_next_instance_round_robin(self, function_id: FunctionIdStr) -> AbstractFunction:
+        """Get the next instance for the given function_id using round-robin scheduling."""
+        with self.function_lock:
+            instances = self.functionId_to_instances_map.get(function_id)
+            if instances is None or len(instances) == 0:
+                return None
+            
+            # Convert WeakSet to list for indexing
+            instances_list = list(instances)
+            if len(instances_list) == 0:
+                return None
+            
+            # Get current round-robin index
+            current_index = self.round_robin_index.get(function_id, 0)
+            
+            # Get the instance at current index
+            selected_instance = instances_list[current_index]
+            
+            # Update round-robin index for next call
+            self.round_robin_index[function_id] = (current_index + 1) % len(instances_list)
+            
+            return selected_instance
+
     def add_function(self, function: AbstractFunction):
         with self.function_lock:
             # Add to function instance map
@@ -72,6 +97,8 @@ class FunctionManager():
             # Add to set of all instances of an image
             if self.functionId_to_instances_map.get(function.function_id) is None:
                 self.functionId_to_instances_map[function.function_id] = WeakSet()
+                # Initialize round-robin index for new function
+                self.round_robin_index[function.function_id] = 0
             self.functionId_to_instances_map[function.function_id].add(function)
 
     def remove_function(self, instance_id: InstanceIdStr):
@@ -80,6 +107,14 @@ class FunctionManager():
                 return
             function = self.instanceId_to_instance_map[instance_id]
             self.functionId_to_instances_map[function.function_id].remove(function)
+            
+            # Reset round-robin index if no instances left
+            if len(self.functionId_to_instances_map[function.function_id]) == 0:
+                self.round_robin_index[function.function_id] = 0
+            # Adjust round-robin index if it's out of bounds
+            elif self.round_robin_index[function.function_id] >= len(self.functionId_to_instances_map[function.function_id]):
+                self.round_robin_index[function.function_id] = 0
+                
             return self.instanceId_to_instance_map.pop(instance_id)
 
     def get_function(self, instance_id: InstanceIdStr):

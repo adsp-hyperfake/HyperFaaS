@@ -30,7 +30,7 @@ type Controller struct {
 	controller.UnimplementedControllerServer
 	runtime         cr.ContainerRuntime
 	StatsManager    *stats.StatsManager
-	callRouter      *network.CallRouter
+	callRouter      network.CallRouterInterface
 	logger          *slog.Logger
 	address         string
 	dbClient        kv.FunctionMetadataStore
@@ -191,13 +191,13 @@ func (s *Controller) Metrics(ctx context.Context, req *controller.MetricsRequest
 	return &controller.MetricsUpdate{CpuPercentPercpu: cpu_percentage_percpu, UsedRamPercent: virtual_mem.UsedPercent}, nil
 }
 
-func NewController(runtime cr.ContainerRuntime, statsManager *stats.StatsManager, logger *slog.Logger, address string, client kv.FunctionMetadataStore) *Controller {
+func NewController(runtime cr.ContainerRuntime, statsManager *stats.StatsManager, callRouter network.CallRouterInterface, logger *slog.Logger, address string, client kv.FunctionMetadataStore) *Controller {
 	return &Controller{
 		runtime:         runtime,
 		StatsManager:    statsManager,
+		callRouter:      callRouter,
 		logger:          logger,
 		address:         address,
-		callRouter:      network.NewCallRouter(logger),
 		dbClient:        client,
 		functionIDCache: make(map[string]kv.FunctionData),
 	}

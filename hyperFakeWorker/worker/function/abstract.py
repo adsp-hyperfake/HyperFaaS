@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
-import threading
 
 from .image import FunctionImage
 from ..models.function import FunctionModelInferer
@@ -13,8 +12,6 @@ class AbstractFunction(ABC):
 
         self.created_at: int = None
         self.last_worked_at: int = None
-
-        self.work_lock: threading._RLock = None
 
         self.name: str = None
         self.function_id: str = None
@@ -50,7 +47,7 @@ class AbstractFunction(ABC):
 
     @staticmethod
     @abstractmethod
-    def create_new(manager: "FunctionManager", function_id: str, image: FunctionImage, model: Path) -> "AbstractFunction":
+    def create_new(manager: "FunctionManager", status_manager: "StatusManager", function_id: str, image: FunctionImage, model_path: Path, model_manager: "ModelManager") -> "AbstractFunction":
         pass
     
     @abstractmethod
@@ -59,14 +56,6 @@ class AbstractFunction(ABC):
 
     @abstractmethod
     def timeout(self) -> bytes:
-        pass
-
-    @abstractmethod
-    def lock(self) -> bool:
-        pass
-    
-    @abstractmethod
-    def unlock(self):
         pass
 
     @abstractmethod
