@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math/rand"
 	"strings"
 	"sync"
 	"time"
@@ -70,12 +71,14 @@ func (c *FakeContainer) Run() {
 
 // FakeContainers is a wrapper for the containers map
 type FakeContainers struct {
-	Containers map[string]*FakeContainer
+	// Maps a functionID to its instances.
+	Containers map[string][]FakeContainer
 	Mu         sync.RWMutex
 }
 
-// FakeModels is a wrapper for the models map
+// FakeModels is a wrapper for the models map.
 type FakeModels struct {
+	// Maps an ImageTag to a function model.
 	Models map[string]FunctionModel
 	Mu     sync.RWMutex
 }
@@ -84,6 +87,8 @@ type FakeModels struct {
 type FakeContainerRuntime struct {
 	Containers               FakeContainers
 	Models                   FakeModels
+	FunctionIDToImageTag     map[string]string
+	mu                       sync.RWMutex
 	CurrentCPUUsage          atomic.Int64
 	CurrentRAMUsage          atomic.Int64
 	CurrentActiveCalls       atomic.Int32
@@ -92,8 +97,27 @@ type FakeContainerRuntime struct {
 	TimeoutDuration          time.Duration
 }
 
+// NewFakeContainerRuntime creates a new fake container runtime.
+func NewFakeContainerRuntime(logger *slog.Logger, timeoutDuration time.Duration, models map[string]FunctionModel) *FakeContainerRuntime {
+	return &FakeContainerRuntime{
+		Logger:          logger,
+		TimeoutDuration: timeoutDuration,
+		Containers: FakeContainers{
+			Containers: make(map[string][]FakeContainer),
+		},
+		Models: FakeModels{
+			Models: models,
+		},
+		FunctionIDToImageTag: make(map[string]string),
+	}
+}
+
 // Start simulates starting a container
 func (f *FakeContainerRuntime) Start(ctx context.Context, functionID string, imageTag string, config *common.Config) (cr.Container, error) {
+
+	f.mu.Lock()
+	f.FunctionIDToImageTag[functionID] = imageTag
+	f.mu.Unlock()
 
 	longID := uuid.New().String()
 	shortID := longID[:12]
@@ -101,7 +125,7 @@ func (f *FakeContainerRuntime) Start(ctx context.Context, functionID string, ima
 	instanceIP := fmt.Sprintf("fake-%s:50052", shortID)
 
 	cCtx, cancel := context.WithTimeout(context.Background(), f.TimeoutDuration)
-	container := &FakeContainer{
+	container := FakeContainer{
 		InstanceID:      shortID,
 		InstanceIP:      instanceIP,
 		InstanceName:    instanceName,
@@ -117,7 +141,7 @@ func (f *FakeContainerRuntime) Start(ctx context.Context, functionID string, ima
 	go container.Run()
 
 	f.Containers.Mu.Lock()
-	f.Containers.Containers[shortID] = container
+	f.Containers.Containers[functionID] = append(f.Containers.Containers[functionID], container)
 	f.Containers.Mu.Unlock()
 
 	f.Logger.Debug("Started fake container",
@@ -143,23 +167,31 @@ func (f *FakeContainerRuntime) Start(ctx context.Context, functionID string, ima
 // Call uses a model to predict function behavior and returns a response
 func (f *FakeContainerRuntime) Call(ctx context.Context, req *common.CallRequest) (*common.CallResponse, error) {
 	f.Containers.Mu.RLock()
-	container, exists := f.Containers.Containers[req.InstanceId.Id]
+	containers, exists := f.Containers.Containers[req.FunctionId.Id]
 	f.Containers.Mu.RUnlock()
 	if !exists {
-		return nil, fmt.Errorf("container not found: %s", req.InstanceId.Id)
+		return nil, fmt.Errorf("fake container not found: %s", req.InstanceId.Id)
 	}
+	c := containers[rand.Intn(len(containers))]
 	// reset container timeout
-	if container.RequestChan != nil {
-		container.RequestChan <- struct{}{}
+	if c.RequestChan != nil {
+		c.RequestChan <- struct{}{}
 	} else {
-		return nil, fmt.Errorf("container not found: %s", req.InstanceId.Id)
+		return nil, fmt.Errorf("fake container's request channel is nil: %s", req.InstanceId.Id)
+	}
+
+	f.mu.RLock()
+	imageTag, exists := f.FunctionIDToImageTag[req.FunctionId.Id]
+	f.mu.RUnlock()
+	if !exists {
+		return nil, fmt.Errorf("image tag not found in functionIDToImageTag map for function ID: %s", req.FunctionId)
 	}
 
 	f.Models.Mu.RLock()
-	model, exists := f.Models.Models[req.FunctionId.Id]
+	model, exists := f.Models.Models[imageTag]
 	f.Models.Mu.RUnlock()
 	if !exists {
-		return nil, fmt.Errorf("model not found for function ID: %s", req.FunctionId)
+		return nil, fmt.Errorf("model not found in models map for image tag: %s, content: %v", imageTag, f.Models.Models)
 	}
 
 	inputs := FunctionInputs{
@@ -177,6 +209,7 @@ func (f *FakeContainerRuntime) Call(ctx context.Context, req *common.CallRequest
 	}
 	f.CurrentCPUUsage.Add(prediction.CPUUsage)
 	f.CurrentRAMUsage.Add(prediction.RAMUsage)
+	f.Logger.Debug("Predicted function behavior", "prediction", prediction)
 	time.Sleep(prediction.Runtime)
 
 	// release after call has been processed
@@ -192,14 +225,15 @@ func (f *FakeContainerRuntime) Call(ctx context.Context, req *common.CallRequest
 // Stop simulates stopping a container
 func (f *FakeContainerRuntime) Stop(ctx context.Context, req *common.InstanceID) (*common.InstanceID, error) {
 	f.Containers.Mu.Lock()
-	container, exists := f.Containers.Containers[req.Id]
+	for _, containers := range f.Containers.Containers {
+		for _, container := range containers {
+			if container.InstanceID == req.Id {
+				container.CancelFunc()
+			}
+		}
+	}
 	f.Containers.Mu.Unlock()
 
-	if !exists {
-		return nil, fmt.Errorf("container not found: %s", req.Id)
-	}
-
-	container.CancelFunc()
 	f.Logger.Debug("Stopped fake container", "instanceID", req.Id)
 
 	return req, nil
@@ -212,12 +246,20 @@ func (f *FakeContainerRuntime) Status(req *controller.StatusRequest, stream cont
 
 // MonitorContainer simulates container lifecycle monitoring
 func (f *FakeContainerRuntime) MonitorContainer(ctx context.Context, instanceId *common.InstanceID, functionId string) error {
+	var container *FakeContainer
 	f.Containers.Mu.RLock()
-	container, exists := f.Containers.Containers[instanceId.Id]
+	for _, containers := range f.Containers.Containers {
+		for _, c := range containers {
+			if c.InstanceID == instanceId.Id {
+				container = &c
+				break
+			}
+		}
+	}
 	f.Containers.Mu.RUnlock()
 
-	if !exists {
-		return fmt.Errorf("container not found: %s", instanceId.Id)
+	if container == nil {
+		return fmt.Errorf("monitoring failed: container not found: %s", instanceId.Id)
 	}
 
 	// Wait for container to stop (either via timeout or manual stop)

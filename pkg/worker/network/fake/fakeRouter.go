@@ -10,7 +10,7 @@ import (
 	"github.com/3s-rg-codes/HyperFaaS/proto/common"
 )
 
-// FakeCallRouter simulates function calls using mathematical models
+// FakeCallRouter just forwards calls to the fake container runtime. It exists to allow for easy switching between different fake runtimes without having to change the controller code.
 type FakeCallRouter struct {
 	mu                sync.RWMutex
 	functionInstances map[string][]string // functionID -> list of instanceIPs
@@ -27,14 +27,16 @@ func NewFakeCallRouter(runtime *fakeRuntime.FakeContainerRuntime, logger *slog.L
 	}
 }
 
-// CallFunction simulates calling a function using mathematical models
+// CallFunction simulates calling a function using the fake container runtime.
 func (f *FakeCallRouter) CallFunction(functionID string, req *common.CallRequest) (*common.CallResponse, error) {
-	f.mu.Lock()
+	f.mu.RLock()
 	instances, exists := f.functionInstances[functionID]
 	if !exists || len(instances) == 0 {
-		f.mu.Unlock()
+		f.mu.RUnlock()
 		return nil, fmt.Errorf("no instances available for function: %s", functionID)
 	}
+
+	f.mu.RUnlock()
 
 	return f.runtime.Call(context.Background(), req)
 }

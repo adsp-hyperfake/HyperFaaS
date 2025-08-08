@@ -36,11 +36,11 @@ services:
     command: ["./main",
      "--address=0.0.0.0:50051",
      "--database-type=http",
-     "--runtime=fake",
+     "--runtime=fake-instant",
      "--timeout=20",
      "--auto-remove",
      "--fake-models-path=/app/models/models.json",
-     "--log-level=info",
+     "--log-level=debug",
      "--log-format=text",
      "--containerized=true",
      "--update-buffer-size=100000"]

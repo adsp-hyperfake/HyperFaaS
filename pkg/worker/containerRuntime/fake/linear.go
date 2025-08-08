@@ -15,7 +15,8 @@ type FunctionLinearModel struct {
 	SampleCount   int        `json:"sample_count"`
 }
 
-func LoadModels(modelsPath string) (map[string]FunctionLinearModel, error) {
+// LoadLinearModels loads a JSON file containing linear models, and returns a mapping of ImageTag to the model. It cannot be a mapping of functionID to the model, because the functionID is not known at startup.
+func LoadLinearModels(modelsPath string) (map[string]FunctionLinearModel, error) {
 	file, err := os.Open(modelsPath)
 	if err != nil {
 		return nil, err

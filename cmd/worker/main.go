@@ -142,12 +142,17 @@ func main() {
 	var callRouter network.CallRouterInterface
 
 	switch wc.Runtime.Type {
+
+	// normal, default runtime
 	case "docker":
 		runtime = dockerRuntime.NewDockerRuntime(wc.Runtime.Containerized, wc.Runtime.AutoRemove, wc.General.Address, logger)
 		callRouter = network.NewCallRouter(logger)
+
+	// Below are fake runtimes. To create new ones, add a new case here.
+	// Fake runtimes need to provide the FunctionModels map to the FakeContainerRuntime constructor.
 	case "fake-linear":
 		// Load models from JSON file
-		linearModels, err := fakeRuntime.LoadModels(wc.Runtime.FakeModelsPath)
+		linearModels, err := fakeRuntime.LoadLinearModels(wc.Runtime.FakeModelsPath)
 
 		if err != nil {
 			logger.Error("Failed to load models", "error", err)
@@ -160,14 +165,25 @@ func main() {
 		}
 
 		// Create fake runtime with loaded models
-		fakeContainerRuntime := &fakeRuntime.FakeContainerRuntime{
-			Models: fakeRuntime.FakeModels{
-				Models: models,
-			},
-			TimeoutDuration: time.Duration(wc.Runtime.FakeTimeoutDuration) * time.Second,
-			Logger:          logger,
-		}
+		fakeContainerRuntime := fakeRuntime.NewFakeContainerRuntime(
+			logger,
+			time.Duration(wc.Runtime.FakeTimeoutDuration)*time.Second,
+			models)
 
+		runtime = fakeContainerRuntime
+		callRouter = fakeNetwork.NewFakeCallRouter(fakeContainerRuntime, logger)
+
+		// fake runtime that returns the same values for all inputs. Useful for debugging.
+	case "fake-instant":
+		models := fakeRuntime.CreateInstantModels([]string{
+			"hyperfaas-echo:latest",
+			"hyperfaas-bfs-json:latest",
+			"hyperfaas-thumbnailer-json:latest",
+		})
+		fakeContainerRuntime := fakeRuntime.NewFakeContainerRuntime(
+			logger,
+			time.Duration(wc.Runtime.FakeTimeoutDuration)*time.Second,
+			models)
 		runtime = fakeContainerRuntime
 		callRouter = fakeNetwork.NewFakeCallRouter(fakeContainerRuntime, logger)
 	default:
