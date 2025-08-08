@@ -73,8 +73,9 @@ d:
 # Running Faked HyperFaaS
 ############################
 
-fake-start bfs_model='bfs_0713_1155.onnx' echo_model='echo_0713_1210.onnx' thumbnailer_model='thumbnailer_0713_1211.onnx':
-    BFS_MODEL={{bfs_model}} ECHO_MODEL={{echo_model}} THUMBNAILER_MODEL={{thumbnailer_model}} WORKER_TYPE=fake-worker docker compose up --scale worker=0 fake-worker leaf database -d --build
+# make sure that the onnx models are in hyperFakeModel/
+fake-start runtime_type onnx_runtime_path:
+    FAKE_RUNTIME_TYPE={{runtime_type}} ONNX_RUNTIME_PATH={{onnx_runtime_path}} WORKER_TYPE=fake-worker docker compose up --scale worker=0 fake-worker leaf database -d --build
 fake-stop:
     WORKER_TYPE=fake-worker docker compose down
 fake-restart:

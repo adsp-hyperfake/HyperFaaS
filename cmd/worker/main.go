@@ -34,6 +34,7 @@ type WorkerConfig struct {
 		Containerized       bool   `env:"RUNTIME_CONTAINERIZED"`
 		FakeModelsPath      string `env:"FAKE_MODELS_PATH"`
 		FakeTimeoutDuration int    `env:"FAKE_TIMEOUT_DURATION"`
+		OnnxRuntimePath     string `env:"ONNX_RUNTIME_PATH"`
 	}
 	Log struct {
 		Level    string `env:"LOG_LEVEL"`
@@ -59,6 +60,7 @@ func parseArgs() (wc WorkerConfig) {
 	flag.StringVar(&(wc.Runtime.FakeModelsPath), "fake-models-path", "models.json", "Path to fake runtime models file. (Env: FAKE_MODELS_PATH)")
 	flag.IntVar(&(wc.Runtime.FakeTimeoutDuration), "fake-timeout-duration", 30, "Fake container timeout duration in seconds. (Env: FAKE_TIMEOUT_DURATION)")
 	flag.Int64Var(&(wc.Stats.UpdateBufferSize), "update-buffer-size", 10000, "Update buffer size. (Env: UPDATE_BUFFER_SIZE)")
+	flag.StringVar(&(wc.Runtime.OnnxRuntimePath), "onnxruntime-path", "/usr/local/lib/python3.10/site-packages/onnxruntime", "Path to the ONNX runtime. (Env: ONNX_RUNTIME_PATH)")
 	flag.Parse()
 	return
 }
@@ -186,6 +188,23 @@ func main() {
 			models)
 		runtime = fakeContainerRuntime
 		callRouter = fakeNetwork.NewFakeCallRouter(fakeContainerRuntime, logger)
+
+		// Uses the onnx runtime. Please make sure to set --onnxruntime-path to the correct path.
+		// The model file names are hard coded for simplicity and assumed to be the ones below.
+	case "fake-onnx":
+		models, err := fakeRuntime.LoadOnnxModels(wc.Runtime.FakeModelsPath, map[string]string{
+			"hyperfaas-echo:latest":             "echo.onnx",
+			"hyperfaas-bfs-json:latest":         "bfs-json.onnx",
+			"hyperfaas-thumbnailer-json:latest": "thumbnailer-json.onnx",
+		}, wc.Runtime.OnnxRuntimePath)
+		if err != nil {
+			logger.Error("Failed to load models", "error", err)
+			os.Exit(1)
+		}
+		fakeContainerRuntime := fakeRuntime.NewFakeContainerRuntime(logger, time.Duration(wc.Runtime.FakeTimeoutDuration)*time.Second, models)
+		runtime = fakeContainerRuntime
+		callRouter = fakeNetwork.NewFakeCallRouter(fakeContainerRuntime, logger)
+
 	default:
 		logger.Error("No runtime specified")
 		os.Exit(1)

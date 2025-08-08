@@ -29,6 +29,8 @@ services:
       dockerfile: worker.Dockerfile
     volumes:
       - ./linear-training/models.json:/app/models/models.json
+      - ./hyperFakeModel/:/app/onnx-models/
+      - ${ONNX_RUNTIME_PATH}:/app/onnx-runtime/libonnxruntime.so
     ports:
       - "50051:50051"
     networks:
@@ -36,14 +38,15 @@ services:
     command: ["./main",
      "--address=0.0.0.0:50051",
      "--database-type=http",
-     "--runtime=fake-instant",
+     "--runtime=${FAKE_RUNTIME_TYPE}",
      "--timeout=20",
      "--auto-remove",
-     "--fake-models-path=/app/models/models.json",
+     "--fake-models-path=/app/onnx-models/",
      "--log-level=debug",
      "--log-format=text",
      "--containerized=true",
-     "--update-buffer-size=100000"]
+     "--update-buffer-size=100000",
+     "--onnxruntime-path=/app/onnx-runtime/libonnxruntime.so"]
     healthcheck:
       test: ["CMD", "sleep", "5"]
       interval: 6s
