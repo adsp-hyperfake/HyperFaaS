@@ -1,3 +1,5 @@
+#!/usr/bin/python
+
 import click
 import json
 import os
@@ -91,22 +93,29 @@ def cli():
 @cli.command()
 @shared_training_options
 @click.option(
+    "--cpu",
+    is_flag=True,
+    default=False,
+    show_default=True,
+    help="Use CPU for training instead of GPU",
+)
+@click.option(
     "--trials",
-    default=20,
+    default=50,
     type=click.IntRange(1, None),
     show_default=True,
     help="Number of trials",
 )
 @click.option(
     "--jobs",
-    default=5,
+    default=1,
     type=click.IntRange(-1, None),
     show_default=True,
     help="Number of parallel jobs (-1 for # of CPUs)",
 )
 @click.option(
     "--epochs",
-    default=50,
+    default=100,
     type=click.IntRange(1, None),
     show_default=True,
     help="Number of training epochs",
@@ -141,6 +150,7 @@ def cli():
     help="Unique ID of the study",
 )
 def optuna(
+    cpu: bool,
     dbs_dir,
     export_dir,
     func_tag,
@@ -165,6 +175,7 @@ def optuna(
     assert jobs != 0, "Number of parallel jobs must not be 0"
     click.echo(f"Trials: {trials}, Jobs: {jobs}")
     optuna_pipeline(
+        cpu,
         func_tag,
         short_name,
         dbs_dir,
