@@ -9,6 +9,13 @@ from neural_network import optuna_pipeline, manual_pipeline
 
 def shared_training_options(func):
     @click.option(
+        "--cpu",
+        is_flag=True,
+        default=False,
+        show_default=True,
+        help="Use CPU for training instead of GPU",
+    )
+    @click.option(
         "--dbs-dir",
         type=click.Path(exists=True),
         default=os.path.normpath(
@@ -92,13 +99,6 @@ def cli():
 
 @cli.command()
 @shared_training_options
-@click.option(
-    "--cpu",
-    is_flag=True,
-    default=False,
-    show_default=True,
-    help="Use CPU for training instead of GPU",
-)
 @click.option(
     "--trials",
     default=50,
@@ -216,6 +216,7 @@ def optuna(
     help="Number of samples to train on [-1 uses all data]",
 )
 def manual(
+    cpu,
     dbs_dir,
     export_dir,
     func_tag,
@@ -239,6 +240,7 @@ def manual(
     if hyperparams:
         hyperparameters = _read_and_validate_hyperparams(hyperparams)
     manual_pipeline(
+        cpu,
         func_tag,
         short_name,
         dbs_dir,

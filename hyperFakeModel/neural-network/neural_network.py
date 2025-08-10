@@ -692,6 +692,7 @@ def run_optuna_study(
 
 
 def manual_pipeline(
+    cpu: bool,
     func_tags,
     short_names,
     dbs_dir,
@@ -719,7 +720,7 @@ def manual_pipeline(
             X, y = create_sample_data(input_cols=input_cols, output_cols=output_cols)
         identifier = short_name + "_" + datetime.now().strftime("%m%d_%H%M")
         onnx_export_path = os.path.join(export_dir, f"{short_name}.onnx")
-        setup_model_training(identifier, onnx_export_path, X, y, epochs, output_cols, hyperparams)
+        setup_model_training(cpu, identifier, onnx_export_path, X, y, epochs, output_cols, hyperparams)
 
 
 def optuna_pipeline(
