@@ -26,6 +26,7 @@ DATALOADER_WORKERS = 0
 FLOAT32_PRECISION = "highest" # "highest", "high", "medium"
 torch.set_float32_matmul_precision(FLOAT32_PRECISION)
 torch.backends.cudnn.benchmark = True
+PRELOAD_ALL_DATA_TO_DEVICE = True
 
 torch.manual_seed(42)
 np.random.seed(42)
@@ -33,7 +34,7 @@ np.random.seed(42)
 CURR_DIR = os.path.dirname(os.path.abspath(__file__))
 
 class CustomDataset(Dataset):
-    def __init__(self, X, y, scaler_X=None, scaler_y=None, fit_scalers=True):
+    def __init__(self, X, y, scaler_X=None, scaler_y=None, fit_scalers=True, cpu: bool = False):
         if scaler_X is None:
             self.scaler_X = StandardScaler()
         else:
@@ -44,14 +45,22 @@ class CustomDataset(Dataset):
         else:
             self.scaler_y = scaler_y
 
+        device = BEST_DEVICE
+        if cpu:
+            device = CPU_DEVICE
+
         # fit scalers for training data only!
         if fit_scalers:
             self.X = self.scaler_X.fit(X)
             self.y = self.scaler_y.fit(y)
 
         # convert to tensors
-        self.X = torch.tensor(X, dtype=torch.float32)
-        self.y = torch.tensor(y, dtype=torch.float32)
+        if PRELOAD_ALL_DATA_TO_DEVICE:
+            self.X = torch.tensor(X, dtype=torch.float32, device=device)
+            self.y = torch.tensor(y, dtype=torch.float32, device=device)
+        else:
+            self.X = torch.tensor(X, dtype=torch.float32)
+            self.y = torch.tensor(y, dtype=torch.float32)
 
     def __len__(self):
         return len(self.X)
@@ -244,15 +253,16 @@ def split_data(X, y, test_size=0.35, val_size=0.5, seed=42):
 
 
 def prepare_dataloaders(
-    X_train, y_train, X_val, y_val, batch_size, X_test=None, y_test=None
+    X_train, y_train, X_val, y_val, batch_size, X_test=None, y_test=None, cpu = False
 ):
-    train_dataset = CustomDataset(X_train, y_train, fit_scalers=True)
+    train_dataset = CustomDataset(X_train, y_train, fit_scalers=True, cpu=cpu)
     val_dataset = CustomDataset(
         X_val,
         y_val,
         scaler_X=train_dataset.scaler_X,
         scaler_y=train_dataset.scaler_y,
         fit_scalers=False,
+        cpu=cpu
     )
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=DATALOADER_WORKERS)
@@ -397,11 +407,14 @@ def evaluate_model(cpu, model, data_loader, criterion):
             total_loss += loss.item()
             num_batches += 1
             # .cpu() copies from gpu to cpu mem if needed
-            all_predictions.append(predictions_normalized.cpu().numpy())
-            all_targets.append(targets_normalized.cpu().numpy())
+            all_predictions.append(predictions_normalized.detach())
+            all_targets.append(targets_normalized.detach())
 
-    all_predictions = np.concatenate(all_predictions, axis=0)
-    all_targets = np.concatenate(all_targets, axis=0)
+    all_predictions = torch.cat(all_predictions, dim=0)
+    all_targets = torch.cat(all_targets, dim=0)
+
+    all_predictions = all_predictions.cpu().numpy()
+    all_targets = all_targets.cpu().numpy()
 
     return total_loss / num_batches, all_predictions, all_targets
 
@@ -436,14 +449,17 @@ def calculate_metrics(y_true, y_pred, target_names):
     return metrics
 
 
-def predict(model, input_data):
+def predict(model, input_data, cpu):
     """Make predictions using the trained model."""
     # ensure input_data is a 2D array
     if len(input_data.shape) == 1:
         input_data = input_data.reshape(1, -1)
 
     # Convert input data to tensor
-    X_tensor = torch.tensor(input_data, dtype=torch.float32).to(DEVICE)
+    device = BEST_DEVICE
+    if cpu:
+        device = CPU_DEVICE
+    X_tensor = torch.tensor(input_data, dtype=torch.float32).to(device)
 
     # Make predictions
     model.eval()
@@ -524,7 +540,7 @@ def setup_model_training(
     print(hyperparams)
 
     train_loader, val_loader, test_loader, train_dataset = prepare_dataloaders(
-        X_train, y_train, X_val, y_val, hyperparams["batch_size"], X_test, y_test
+        X_train, y_train, X_val, y_val, hyperparams["batch_size"], X_test, y_test, cpu=cpu
     )
 
     # Model configuration
@@ -580,7 +596,7 @@ def setup_model_training(
     return min(val_losses)
 
 
-def optuna_objective(trial, X, y, epochs, cpu: bool = False):
+def optuna_objective(trial, X, y, epochs, cpu: bool):
     """
     Optuna objective function for hyperparameter optimization.
     This function defines hyperparameters to be optimized and trains the model once and returns the validation loss.
@@ -607,7 +623,7 @@ def optuna_objective(trial, X, y, epochs, cpu: bool = False):
     # Split data and prepare dataloaders
     X_train, X_val, _, y_train, y_val, _ = split_data(X, y)
     train_loader, val_loader, _, train_dataset = prepare_dataloaders(
-        X_train, y_train, X_val, y_val, batch_size
+        X_train, y_train, X_val, y_val, batch_size, cpu
     )
 
     # Define model, loss function, and optimizer
