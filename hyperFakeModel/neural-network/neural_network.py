@@ -21,7 +21,12 @@ import optuna
 
 BEST_DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 CPU_DEVICE = torch.device("cpu")
-DATALOADER_WORKERS = 1  # Set to 0 if you encounter issues with multiprocessing
+COMPILATION_MODE = None
+DATALOADER_WORKERS = 0
+FLOAT32_PRECISION = "highest" # "highest", "high", "medium"
+torch.set_float32_matmul_precision(FLOAT32_PRECISION)
+torch.backends.cudnn.benchmark = True
+
 torch.manual_seed(42)
 np.random.seed(42)
 
@@ -140,15 +145,20 @@ def create_sample_data(input_cols, output_cols, n_samples=10000):
     y = df[output_cols].values
     return X, y
 
-
-def export_model_to_onnx(model, path):
+def export_model_to_onnx(cpu, model, path):
     # Save the model
     model.eval()
     dummy_input = torch.zeros(1, model.input_dim)
+    if cpu:
+        device = CPU_DEVICE
+    else:
+        device = BEST_DEVICE
+    print("cpu", cpu, "device", device)
     torch.onnx.export(
-        model.to(DEVICE),
-        dummy_input.to(DEVICE),
+        model.to(device),
+        dummy_input.to(device),
         path,
+        dynamo=True,
         input_names=["input"],
         output_names=["output"],
         do_constant_folding=True,  # Optimize the model
@@ -378,16 +388,16 @@ def evaluate_model(cpu, model, data_loader, criterion):
 
             # Forward pass
             predictions = model(data)
-            prodictions_normalized = (
+            predictions_normalized = (
                 predictions - model.output_mean
             ) / model.output_scale
             targets_normalized = (targets - model.output_mean) / model.output_scale
             # Loss calcs
-            loss = criterion(prodictions_normalized, targets_normalized)
+            loss = criterion(predictions_normalized, targets_normalized)
             total_loss += loss.item()
             num_batches += 1
             # .cpu() copies from gpu to cpu mem if needed
-            all_predictions.append(prodictions_normalized.cpu().numpy())
+            all_predictions.append(predictions_normalized.cpu().numpy())
             all_targets.append(targets_normalized.cpu().numpy())
 
     all_predictions = np.concatenate(all_predictions, axis=0)
@@ -460,6 +470,9 @@ def initialize_model(
         device = BEST_DEVICE
     print(f"Initializing model on {device}")
     model = MLP(input_dim, output_dim, hidden_dims, dropouts).to(device)
+    if COMPILATION_MODE is not None:
+        print(f"Compiling model with {COMPILATION_MODE}")
+        model = torch.compile(model, mode=COMPILATION_MODE)
     criterion = nn.MSELoss()
     if optimizer_name == "Adam":
         optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
@@ -560,7 +573,7 @@ def setup_model_training(
     print("=" * 30)
 
     # Export the model
-    export_model_to_onnx(model, onnx_export_path)
+    export_model_to_onnx(cpu, model, onnx_export_path)
 
     # Plot loss curves
     plot_loss_curves(train_losses, val_losses)
