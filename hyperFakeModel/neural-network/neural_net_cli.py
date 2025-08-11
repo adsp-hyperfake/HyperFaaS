@@ -101,21 +101,21 @@ def cli():
 @shared_training_options
 @click.option(
     "--trials",
-    default=50,
+    default=20,
     type=click.IntRange(1, None),
     show_default=True,
     help="Number of trials",
 )
 @click.option(
     "--jobs",
-    default=1,
+    default=5,
     type=click.IntRange(-1, None),
     show_default=True,
     help="Number of parallel jobs (-1 for # of CPUs)",
 )
 @click.option(
     "--epochs",
-    default=100,
+    default=50,
     type=click.IntRange(1, None),
     show_default=True,
     help="Number of training epochs",
