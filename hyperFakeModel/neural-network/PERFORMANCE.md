@@ -26,7 +26,7 @@ original database: 8_997_754 rows \
 removed zeros: 1_085_890 rows \
 bfs: 2_375_594 rows
 
-We ran the eperiments by executing the manual training, utilizing a fixed hyperparameter set and running 10 training epochs for the bfs function.
+We ran the experiments by executing the manual training, utilizing a fixed hyperparameter set and running 10 training epochs for the bfs function.
 
 ```json
 {
