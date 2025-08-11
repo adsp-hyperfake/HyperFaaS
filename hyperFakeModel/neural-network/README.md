@@ -76,3 +76,11 @@ Options:
                            [x>=-1]
   --help                   Show this message and exit.
 ```
+
+## Performance
+
+We applied the improvements mentioned in the [official performance tuning guide](https://docs.pytorch.org/tutorials/recipes/recipes/tuning_guide.html).
+
+We achieved performance improvements of up to 20% for training on GPUs and 30% for training on CPU.
+
+You can read more about that [here](./PERFORMANCE.md)

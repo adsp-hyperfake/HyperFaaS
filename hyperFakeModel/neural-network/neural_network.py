@@ -19,15 +19,22 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 import optuna
 
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+BEST_DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+CPU_DEVICE = torch.device("cpu")
+COMPILATION_MODE = None
+DATALOADER_WORKERS = 0
+FLOAT32_PRECISION = "highest" # "highest", "high", "medium"
+torch.set_float32_matmul_precision(FLOAT32_PRECISION)
+torch.backends.cudnn.benchmark = True
+PRELOAD_ALL_DATA_TO_DEVICE = True
+
 torch.manual_seed(42)
 np.random.seed(42)
 
 CURR_DIR = os.path.dirname(os.path.abspath(__file__))
 
-
 class CustomDataset(Dataset):
-    def __init__(self, X, y, scaler_X=None, scaler_y=None, fit_scalers=True):
+    def __init__(self, X, y, scaler_X=None, scaler_y=None, fit_scalers=True, cpu: bool = False):
         if scaler_X is None:
             self.scaler_X = StandardScaler()
         else:
@@ -38,14 +45,22 @@ class CustomDataset(Dataset):
         else:
             self.scaler_y = scaler_y
 
+        device = BEST_DEVICE
+        if cpu:
+            device = CPU_DEVICE
+
         # fit scalers for training data only!
         if fit_scalers:
             self.X = self.scaler_X.fit(X)
             self.y = self.scaler_y.fit(y)
 
         # convert to tensors
-        self.X = torch.tensor(X, dtype=torch.float32)
-        self.y = torch.tensor(y, dtype=torch.float32)
+        if PRELOAD_ALL_DATA_TO_DEVICE:
+            self.X = torch.tensor(X, dtype=torch.float32, device=device)
+            self.y = torch.tensor(y, dtype=torch.float32, device=device)
+        else:
+            self.X = torch.tensor(X, dtype=torch.float32)
+            self.y = torch.tensor(y, dtype=torch.float32)
 
     def __len__(self):
         return len(self.X)
@@ -139,15 +154,20 @@ def create_sample_data(input_cols, output_cols, n_samples=10000):
     y = df[output_cols].values
     return X, y
 
-
-def export_model_to_onnx(model, path):
+def export_model_to_onnx(cpu, model, path):
     # Save the model
     model.eval()
     dummy_input = torch.zeros(1, model.input_dim)
+    if cpu:
+        device = CPU_DEVICE
+    else:
+        device = BEST_DEVICE
+    print("cpu", cpu, "device", device)
     torch.onnx.export(
-        model.to(DEVICE),
-        dummy_input.to(DEVICE),
+        model.to(device),
+        dummy_input.to(device),
         path,
+        dynamo=True,
         input_names=["input"],
         output_names=["output"],
         do_constant_folding=True,  # Optimize the model
@@ -233,19 +253,20 @@ def split_data(X, y, test_size=0.35, val_size=0.5, seed=42):
 
 
 def prepare_dataloaders(
-    X_train, y_train, X_val, y_val, batch_size, X_test=None, y_test=None
+    X_train, y_train, X_val, y_val, batch_size, X_test=None, y_test=None, cpu = False
 ):
-    train_dataset = CustomDataset(X_train, y_train, fit_scalers=True)
+    train_dataset = CustomDataset(X_train, y_train, fit_scalers=True, cpu=cpu)
     val_dataset = CustomDataset(
         X_val,
         y_val,
         scaler_X=train_dataset.scaler_X,
         scaler_y=train_dataset.scaler_y,
         fit_scalers=False,
+        cpu=cpu
     )
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=DATALOADER_WORKERS)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=DATALOADER_WORKERS)
 
     test_loader = None
     if X_test is not None and y_test is not None:
@@ -256,7 +277,7 @@ def prepare_dataloaders(
             scaler_y=train_dataset.scaler_y,
             fit_scalers=False,
         )
-        test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+        test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=DATALOADER_WORKERS)
     else:
         test_dataset = None
 
@@ -264,6 +285,7 @@ def prepare_dataloaders(
 
 
 def train_model(
+    cpu: bool,
     model,
     train_data_loader,
     val_data_loader,
@@ -271,7 +293,7 @@ def train_model(
     optimizer,
     scheduler,
     num_epochs=100,
-    patience=20,
+    patience=25,
 ):
     """Train the model with early stopping."""
 
@@ -288,10 +310,10 @@ def train_model(
     print("-" * 60)
 
     for epoch in tqdm(range(num_epochs), desc="Training Epochs", ncols=100):
-        train_loss = train_epoch(model, train_data_loader, criterion, optimizer)
+        train_loss = train_epoch(cpu, model, train_data_loader, criterion, optimizer)
 
         # Evaluate on validation set
-        val_loss, _, _ = evaluate_model(model, val_data_loader, criterion)
+        val_loss, _, _ = evaluate_model(cpu, model, val_data_loader, criterion)
         # Update learning rate scheduler
         scheduler.step(val_loss)
 
@@ -330,13 +352,17 @@ def train_model(
     return train_losses, val_losses
 
 
-def train_epoch(model, train_data_loader, criterion, optimizer):
+def train_epoch(cpu, model, train_data_loader, criterion, optimizer):
     """Train the model for one epoch."""
     model.train()
     total_loss = 0.0
 
     for data, targets in train_data_loader:
-        data, targets = data.to(DEVICE), targets.to(DEVICE)
+        if cpu:
+            device = CPU_DEVICE
+        else:
+            device = BEST_DEVICE
+        data, targets = data.to(device), targets.to(device)
         optimizer.zero_grad()
         # forward pass
         predictions = model(data)
@@ -354,7 +380,7 @@ def train_epoch(model, train_data_loader, criterion, optimizer):
     return total_loss / len(train_data_loader)
 
 
-def evaluate_model(model, data_loader, criterion):
+def evaluate_model(cpu, model, data_loader, criterion):
     """Evaluate the model on a dataset."""
     model.eval()
     total_loss = 0.0
@@ -364,24 +390,31 @@ def evaluate_model(model, data_loader, criterion):
 
     with torch.no_grad():
         for data, targets in data_loader:
-            data, targets = data.to(DEVICE), targets.to(DEVICE)
+            if cpu:
+                device = CPU_DEVICE
+            else:
+                device = BEST_DEVICE
+            data, targets = data.to(device), targets.to(device)
 
             # Forward pass
             predictions = model(data)
-            prodictions_normalized = (
+            predictions_normalized = (
                 predictions - model.output_mean
             ) / model.output_scale
             targets_normalized = (targets - model.output_mean) / model.output_scale
             # Loss calcs
-            loss = criterion(prodictions_normalized, targets_normalized)
+            loss = criterion(predictions_normalized, targets_normalized)
             total_loss += loss.item()
             num_batches += 1
             # .cpu() copies from gpu to cpu mem if needed
-            all_predictions.append(prodictions_normalized.cpu().numpy())
-            all_targets.append(targets_normalized.cpu().numpy())
+            all_predictions.append(predictions_normalized.detach())
+            all_targets.append(targets_normalized.detach())
 
-    all_predictions = np.concatenate(all_predictions, axis=0)
-    all_targets = np.concatenate(all_targets, axis=0)
+    all_predictions = torch.cat(all_predictions, dim=0)
+    all_targets = torch.cat(all_targets, dim=0)
+
+    all_predictions = all_predictions.cpu().numpy()
+    all_targets = all_targets.cpu().numpy()
 
     return total_loss / num_batches, all_predictions, all_targets
 
@@ -416,14 +449,17 @@ def calculate_metrics(y_true, y_pred, target_names):
     return metrics
 
 
-def predict(model, input_data):
+def predict(model, input_data, cpu):
     """Make predictions using the trained model."""
     # ensure input_data is a 2D array
     if len(input_data.shape) == 1:
         input_data = input_data.reshape(1, -1)
 
     # Convert input data to tensor
-    X_tensor = torch.tensor(input_data, dtype=torch.float32).to(DEVICE)
+    device = BEST_DEVICE
+    if cpu:
+        device = CPU_DEVICE
+    X_tensor = torch.tensor(input_data, dtype=torch.float32).to(device)
 
     # Make predictions
     model.eval()
@@ -434,6 +470,7 @@ def predict(model, input_data):
 
 
 def initialize_model(
+    cpu: bool,
     input_dim,
     output_dim,
     hidden_dims,
@@ -443,7 +480,15 @@ def initialize_model(
     optimizer_name,
     scheduler_patience,
 ):
-    model = MLP(input_dim, output_dim, hidden_dims, dropouts).to(DEVICE)
+    if cpu:
+        device = CPU_DEVICE
+    else:
+        device = BEST_DEVICE
+    print(f"Initializing model on {device}")
+    model = MLP(input_dim, output_dim, hidden_dims, dropouts).to(device)
+    if COMPILATION_MODE is not None:
+        print(f"Compiling model with {COMPILATION_MODE}")
+        model = torch.compile(model, mode=COMPILATION_MODE)
     criterion = nn.MSELoss()
     if optimizer_name == "Adam":
         optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
@@ -458,6 +503,7 @@ def initialize_model(
 
 
 def setup_model_training(
+    cpu: bool,
     identifier,
     onnx_export_path,
     X,
@@ -470,7 +516,12 @@ def setup_model_training(
     torch.manual_seed(42)
     np.random.seed(42)
 
-    print(f"Starting training for {identifier} using device {DEVICE}.")
+    if cpu:
+        device = CPU_DEVICE
+    else:
+        device = BEST_DEVICE
+
+    print(f"Starting training for {identifier} using device {device}.")
 
     # train/val/test split
     X_train, X_val, X_test, y_train, y_val, y_test = split_data(X, y)
@@ -489,7 +540,7 @@ def setup_model_training(
     print(hyperparams)
 
     train_loader, val_loader, test_loader, train_dataset = prepare_dataloaders(
-        X_train, y_train, X_val, y_val, hyperparams["batch_size"], X_test, y_test
+        X_train, y_train, X_val, y_val, hyperparams["batch_size"], X_test, y_test, cpu=cpu
     )
 
     # Model configuration
@@ -498,6 +549,7 @@ def setup_model_training(
 
     # Create model, loss function, and optimizer
     model, criterion, optimizer, scheduler = initialize_model(
+        cpu,
         input_dim,
         output_dim,
         hyperparams["hidden_dims"],
@@ -512,6 +564,7 @@ def setup_model_training(
 
     # Train the model
     train_losses, val_losses = train_model(
+        cpu,
         model,
         train_loader,
         val_loader,
@@ -524,7 +577,7 @@ def setup_model_training(
 
     # Evaluate on test set
     test_loss, test_predictions, test_targets = evaluate_model(
-        model, test_loader, criterion
+        cpu, model, test_loader, criterion
     )
     test_metrics = calculate_metrics(test_targets, test_predictions, output_cols)
 
@@ -536,14 +589,14 @@ def setup_model_training(
     print("=" * 30)
 
     # Export the model
-    export_model_to_onnx(model, onnx_export_path)
+    export_model_to_onnx(cpu, model, onnx_export_path)
 
     # Plot loss curves
     plot_loss_curves(train_losses, val_losses)
     return min(val_losses)
 
 
-def optuna_objective(trial, X, y, epochs):
+def optuna_objective(trial, X, y, epochs, cpu: bool):
     """
     Optuna objective function for hyperparameter optimization.
     This function defines hyperparameters to be optimized and trains the model once and returns the validation loss.
@@ -570,7 +623,7 @@ def optuna_objective(trial, X, y, epochs):
     # Split data and prepare dataloaders
     X_train, X_val, _, y_train, y_val, _ = split_data(X, y)
     train_loader, val_loader, _, train_dataset = prepare_dataloaders(
-        X_train, y_train, X_val, y_val, batch_size
+        X_train, y_train, X_val, y_val, batch_size, cpu
     )
 
     # Define model, loss function, and optimizer
@@ -578,6 +631,7 @@ def optuna_objective(trial, X, y, epochs):
     output_dim = y.shape[1]
 
     model, criterion, optimizer, scheduler = initialize_model(
+        cpu,
         input_dim,
         output_dim,
         hidden_dims,
@@ -592,6 +646,7 @@ def optuna_objective(trial, X, y, epochs):
 
     # Train the model
     train_model(
+        cpu,
         model,
         train_loader,
         val_loader,
@@ -601,17 +656,17 @@ def optuna_objective(trial, X, y, epochs):
         num_epochs=epochs,
         patience=patience,
     )
-    val_loss, _, _ = evaluate_model(model, val_loader, criterion)
+    val_loss, _, _ = evaluate_model(cpu, model, val_loader, criterion)
 
     return val_loss
 
 
 def run_optuna_study(
-    identifier, export_dir, trials, jobs, epochs, final_epochs, X, y, output_cols, state_db: None
+    cpu: bool, identifier, export_dir, trials, jobs, epochs, final_epochs, X, y, output_cols, state_db: None
 ):
     """Main function to run the training pipeline with Optuna hyperparameter optimization."""
     # Wrap the objective function with partial to pass additional arguments
-    wrapped_objective = partial(optuna_objective, X=X, y=y, epochs=epochs)
+    wrapped_objective = partial(optuna_objective, X=X, y=y, epochs=epochs, cpu=cpu)
 
     # Create an Optuna study and optimize
     if state_db:
@@ -651,7 +706,7 @@ def run_optuna_study(
     onnx_export_path = os.path.join(export_dir, f"{identifier}.onnx")
     # Train the model with the best hyperparameters
     val_score_final_training = setup_model_training(
-        identifier, onnx_export_path, X, y, final_epochs, hyperparams, output_cols
+        cpu, identifier, onnx_export_path, X, y, final_epochs, output_cols, hyperparams
     )
 
     # Write the best hyperparameters to a file
@@ -666,6 +721,7 @@ def run_optuna_study(
 
 
 def manual_pipeline(
+    cpu: bool,
     func_tags,
     short_names,
     dbs_dir,
@@ -693,10 +749,11 @@ def manual_pipeline(
             X, y = create_sample_data(input_cols=input_cols, output_cols=output_cols)
         identifier = short_name + "_" + datetime.now().strftime("%m%d_%H%M")
         onnx_export_path = os.path.join(export_dir, f"{short_name}.onnx")
-        setup_model_training(identifier, onnx_export_path, X, y, epochs, output_cols, hyperparams)
+        setup_model_training(cpu, identifier, onnx_export_path, X, y, epochs, output_cols, hyperparams)
 
 
 def optuna_pipeline(
+    cpu: bool,
     func_tags,
     short_names,
     dbs_dir,
@@ -734,5 +791,5 @@ def optuna_pipeline(
             state_db_path = os.path.join(CURR_DIR, "models", f"{identifier}.db")
             state_db = f"sqlite:///{state_db_path}"
         run_optuna_study(
-            identifier, export_dir, trials, jobs, epochs, final_epochs, X, y, output_cols, state_db
+            cpu, identifier, export_dir, trials, jobs, epochs, final_epochs, X, y, output_cols, state_db
         )
