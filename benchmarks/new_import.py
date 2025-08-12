@@ -14,7 +14,7 @@ def create_tables(conn):
         timestamp TEXT,  -- ISO 8601 timestamp
         function_id TEXT,
         image_tag TEXT,
-        latency_ms INTEGER,
+        grpc_req_duration INTEGER,
         status TEXT,
         error TEXT,
         request_size_bytes INTEGER,
