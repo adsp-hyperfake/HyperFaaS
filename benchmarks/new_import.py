@@ -10,7 +10,7 @@ def create_tables(conn):
     
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS metrics (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        request_id INTEGER PRIMARY KEY AUTOINCREMENT,
         timestamp TEXT,  -- ISO 8601 timestamp
         function_id TEXT,
         image_tag TEXT,
@@ -25,8 +25,6 @@ def create_tables(conn):
         leaf_got_request_timestamp INTEGER, --unix nanoseconds
         leaf_scheduled_call_timestamp INTEGER, --unix nanoseconds
         function_processing_time_ns INTEGER, -- nanoseconds
-        
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     ''')
     
