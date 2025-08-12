@@ -60,7 +60,8 @@ func parseArgs() (wc WorkerConfig) {
 	flag.StringVar(&(wc.Runtime.FakeModelsPath), "fake-models-path", "models.json", "Path to fake runtime models file. (Env: FAKE_MODELS_PATH)")
 	flag.IntVar(&(wc.Runtime.FakeTimeoutDuration), "fake-timeout-duration", 30, "Fake container timeout duration in seconds. (Env: FAKE_TIMEOUT_DURATION)")
 	flag.Int64Var(&(wc.Stats.UpdateBufferSize), "update-buffer-size", 10000, "Update buffer size. (Env: UPDATE_BUFFER_SIZE)")
-	flag.StringVar(&(wc.Runtime.OnnxRuntimePath), "onnxruntime-path", "/usr/local/lib/python3.10/site-packages/onnxruntime", "Path to the ONNX runtime. (Env: ONNX_RUNTIME_PATH)")
+	// The default value for this path is the installation path of the onnxruntime package in the debian worker container when installed with pip3
+	flag.StringVar(&(wc.Runtime.OnnxRuntimePath), "onnxruntime-path", "/usr/local/lib/python3.11/dist-packages/onnxruntime/capi/libonnxruntime.so.1.22.0", "Path to the ONNX runtime. (Env: ONNX_RUNTIME_PATH)")
 	flag.Parse()
 	return
 }

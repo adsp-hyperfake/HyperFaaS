@@ -74,8 +74,8 @@ d:
 ############################
 
 # make sure that the onnx models are in hyperFakeModel/
-fake-start runtime_type onnx_runtime_path:
-    FAKE_RUNTIME_TYPE={{runtime_type}} ONNX_RUNTIME_PATH={{onnx_runtime_path}} WORKER_TYPE=fake-worker docker compose up --scale worker=0 fake-worker leaf database -d --build
+fake-start runtime_type:
+    FAKE_RUNTIME_TYPE={{runtime_type}} WORKER_TYPE=fake-worker docker compose up --scale worker=0 fake-worker leaf database -d --build
 fake-stop:
     WORKER_TYPE=fake-worker docker compose down
 fake-restart:

@@ -26,11 +26,10 @@ services:
   fake-worker:
     build:
       context: .
-      dockerfile: worker.Dockerfile
+      dockerfile: debianworker.Dockerfile
     volumes:
       - ./linear-training/models.json:/app/models/models.json
       - ./hyperFakeModel/:/app/onnx-models/
-      - ${ONNX_RUNTIME_PATH}:/app/onnx-runtime/libonnxruntime.so
     ports:
       - "50051:50051"
     networks:
@@ -45,8 +44,7 @@ services:
      "--log-level=debug",
      "--log-format=text",
      "--containerized=true",
-     "--update-buffer-size=100000",
-     "--onnxruntime-path=/app/onnx-runtime/libonnxruntime.so"]
+     "--update-buffer-size=100000"]
     healthcheck:
       test: ["CMD", "sleep", "5"]
       interval: 6s
