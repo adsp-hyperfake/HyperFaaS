@@ -24,7 +24,7 @@ def create_tables(conn):
         instance_id TEXT,
         leaf_got_request_timestamp INTEGER, --unix nanoseconds
         leaf_scheduled_call_timestamp INTEGER, --unix nanoseconds
-        function_processing_time_ns INTEGER, -- nanoseconds
+        function_processing_time_ns INTEGER -- nanoseconds
     )
     ''')
     
