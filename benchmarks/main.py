@@ -46,21 +46,6 @@ def run_database_analysis(metrics: pd.DataFrame, include_cold_starts: bool = Fal
         traceback.print_exc(file=sys.stderr)
         sys.exit(1)
 
-def run_scenarios_analysis(scenarios_path: str):
-    """Run analysis on k6 scenarios JSON file."""
-    print("Loading k6 scenarios...")
-    try:
-        scenarios_df = load_k6_scenarios(scenarios_path)
-        scenarios_results = analyze_k6_scenarios_summary(scenarios_df)
-        print_k6_scenarios_analysis(scenarios_results)
-        return scenarios_df
-        
-    except Exception as e:
-        print(f"Error during scenarios analysis: {e}", file=sys.stderr)
-        import traceback
-        traceback.print_exc(file=sys.stderr)
-        sys.exit(1)
-
 def run_plotting(metrics=None, scenarios_df=None, scenarios_path=None, show=True, save_path=None):
     """Run plotting operations."""
     if not metrics and not scenarios_df:
@@ -103,16 +88,22 @@ def main():
                         help='Show plots interactively')
     parser.add_argument('--prefix',
                         help='Prefix to save plots with (optional)')
+    parser.add_argument('--normalize-time', action='store_true',
+                        help='Normalize time for all workloads')
     
     args = parser.parse_args()
     
     d = Data()
-    plotter = Plotter(show=args.show, save_path=args.plot_save_path, prefix=args.prefix)
+    plotter = Plotter(show=args.show, save_path=args.plot_save_path, prefix=args.prefix, normalize_time=args.normalize_time)
     # Run analysis based on arguments
     if args.analysis:
         # Run database analysis
-        metrics = d.load_metrics(args.db_path)
-        run_database_analysis(metrics, include_cold_starts=False)
+        if args.db_paths and len(args.db_paths) > 0:
+            metrics = d.load_metrics(args.db_paths[0])
+            run_database_analysis(metrics, include_cold_starts=False)
+        else:
+            print("--analysis requires at least one --db-paths entry", file=sys.stderr)
+            sys.exit(1)
         
     if args.scenarios_path:
             scenarios_df = d.load_k6_scenarios(args.scenarios_path)
@@ -128,18 +119,28 @@ def main():
             cpu_metrics_list.append(d.load_cpu_mem_stats_labeled(path, label=label))
         if len(metrics_list) == 1:
             print(f"\n=== plotting for run '{metrics_list[0]['worker_type'].iat[0]}' ===")
+            # Single-run: wrap DataFrames in a mapping keyed by label for multi-run plotting APIs
+            single_label = metrics_list[0]["worker_type"].iat[0]
+            runs_metrics = {single_label: metrics_list[0]}
+            runs_cpu = {single_label: cpu_metrics_list[0]}
+
+            # Single-DF plots
             plotter.plot_throughput_leaf_node(metrics_list[0])
             plotter.plot_decomposed_latency(metrics_list[0])
-            plotter.plot_latency_distribution(metrics_list[0])
-            plotter.plot_latency_distribution_per_image(metrics_list[0])
-            plotter.plot_cpu_usage_total(cpu_metrics_list[0])
-            plotter.plot_memory_usage_total(cpu_metrics_list[0])
+
+            # Multi-run style plots (accept mapping)
+            plotter.plot_latency_distribution(runs_metrics)
+            plotter.plot_latency_distribution_per_image(runs_metrics)
+            plotter.plot_latency_time_comparison(runs_metrics)
+            plotter.plot_cpu_usage_total(runs_cpu)
+            plotter.plot_memory_usage_total(runs_cpu)
         else:
             runs = {df["worker_type"].iat[0]: df for df in metrics_list}
             plotter.plot_latency_rps_comparison(runs)
             plotter.plot_latency_ecdf_per_image(runs, cols=3)
             plotter.plot_latency_distribution(runs)
             plotter.plot_latency_distribution_per_image(runs)
+            plotter.plot_latency_time_comparison(runs)
             runs_cpu = {df["worker_type"].iat[0]: df for df in cpu_metrics_list}
             plotter.plot_cpu_usage_total(runs_cpu)
             plotter.plot_memory_usage_total(runs_cpu)

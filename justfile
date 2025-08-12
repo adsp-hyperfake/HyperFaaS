@@ -281,3 +281,17 @@ kill-db:
 kill: kill-worker kill-db
 
 
+plot-all:
+    cd benchmarks && uv run main.py --plot --db-paths ~/model-runs/final-real/real.db ~/model-runs/final-rf/rf.db ~/model-runs/final-nn/nn.db ~/model-runs/final-linear/linear.db --plot-save-path ./plots/ --prefix final --normalize-time
+
+plot-all2:
+    cd benchmarks && uv run main.py --plot --db-paths ~/model-runs/final-real/real.db ~/model-runs/final-rf/rf.db ~/model-runs/final-linear/linear.db ~/model-runs/final-nn-2/nn-2.db --plot-save-path ./plots/ --prefix ultra --normalize-time
+
+k6-pprof:
+    go tool pprof http://localhost:6565/debug/pprof/profile?seconds=60
+
+k6-memory:
+    go tool pprof http://localhost:6565/debug/pprof/heap
+
+linear-train db_path output:
+    cd linear-training && uv run train_models.py --db {{db_path}} --output {{output}}

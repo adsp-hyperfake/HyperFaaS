@@ -4,27 +4,28 @@ import csv
 import sqlite3
 from datetime import datetime
 import argparse
+from column_names import *
 
 def create_tables(conn):
     cursor = conn.cursor()
     
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS metrics (
-        request_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        timestamp TEXT,  -- ISO 8601 timestamp
-        function_id TEXT,
-        image_tag TEXT,
-        grpc_req_duration INTEGER,
-        status TEXT,
-        error TEXT,
-        request_size_bytes INTEGER,
-        response_size_bytes INTEGER,
-        call_queued_timestamp INTEGER, --unix nanoseconds
-        got_response_timestamp INTEGER, --unix nanoseconds
-        instance_id TEXT,
-        leaf_got_request_timestamp INTEGER, --unix nanoseconds
-        leaf_scheduled_call_timestamp INTEGER, --unix nanoseconds
-        function_processing_time_ns INTEGER -- nanoseconds
+    cursor.execute(f'''
+    CREATE TABLE IF NOT EXISTS {METRICS_TABLE} (
+        {REQUEST_ID} INTEGER PRIMARY KEY AUTOINCREMENT,
+        {TIMESTAMP} TEXT,  -- ISO 8601 timestamp
+        {FUNCTION_ID} TEXT,
+        {IMAGE_TAG} TEXT,
+        {GRPC_REQ_DURATION} INTEGER,
+        {STATUS} TEXT,
+        {ERROR} TEXT,
+        {REQUEST_SIZE_BYTES} INTEGER,
+        {RESPONSE_SIZE_BYTES} INTEGER,
+        {CALL_QUEUED_TIMESTAMP} INTEGER, --unix nanoseconds
+        {GOT_RESPONSE_TIMESTAMP} INTEGER, --unix nanoseconds
+        {INSTANCE_ID} TEXT,
+        {LEAF_GOT_REQUEST_TIMESTAMP} INTEGER, --unix nanoseconds
+        {LEAF_SCHEDULED_CALL_TIMESTAMP} INTEGER, --unix nanoseconds
+        {FUNCTION_PROCESSING_TIME_NS} INTEGER -- nanoseconds
     )
     ''')
     
@@ -55,27 +56,27 @@ def import_csv_to_sqlite(csv_file='test_results.csv', db_file='metrics.db'):
                         except ValueError:
                             return None
                     
-                    cursor.execute('''
-                    INSERT INTO metrics (
-                        timestamp, function_id, image_tag, grpc_req_duration, status, error,
-                        request_size_bytes, response_size_bytes, call_queued_timestamp,
-                        got_response_timestamp, instance_id, leaf_got_request_timestamp,
-                        leaf_scheduled_call_timestamp, function_processing_time_ns
+                    cursor.execute(f'''
+                    INSERT INTO {METRICS_TABLE} (
+                        {TIMESTAMP}, {FUNCTION_ID}, {IMAGE_TAG}, {GRPC_REQ_DURATION}, {STATUS}, {ERROR},
+                        {REQUEST_SIZE_BYTES}, {RESPONSE_SIZE_BYTES}, {CALL_QUEUED_TIMESTAMP},
+                        {GOT_RESPONSE_TIMESTAMP}, {INSTANCE_ID}, {LEAF_GOT_REQUEST_TIMESTAMP},
+                        {LEAF_SCHEDULED_CALL_TIMESTAMP}, {FUNCTION_PROCESSING_TIME_NS}
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ''', (
-                        row.get('timestamp'),
-                        row.get('function_id'),
-                        row.get('image_tag'),
+                        row.get(TIMESTAMP),
+                        row.get(FUNCTION_ID),
+                        row.get(IMAGE_TAG),
                         safe_int(row.get('latency_ms')),
-                        row.get('status'),
-                        row.get('error') if row.get('error') else None,
+                        row.get(STATUS),
+                        row.get(ERROR) if row.get(ERROR) else None,
                         safe_int(row.get('request_size_bytes')),
                         safe_int(row.get('response_size_bytes')),
-                        row.get('call_queued_timestamp'),
-                        row.get('got_response_timestamp'),
-                        row.get('instance_id') if row.get('instance_id') else None,
-                        row.get('leaf_got_request_timestamp'),
-                        row.get('leaf_scheduled_call_timestamp'),
+                        row.get(CALL_QUEUED_TIMESTAMP),
+                        row.get(GOT_RESPONSE_TIMESTAMP),
+                        row.get(INSTANCE_ID) if row.get(INSTANCE_ID) else None,
+                        row.get(LEAF_GOT_REQUEST_TIMESTAMP),
+                        row.get(LEAF_SCHEDULED_CALL_TIMESTAMP),
                         safe_int(row.get('function_processing_time_ns'))
                     ))
                     

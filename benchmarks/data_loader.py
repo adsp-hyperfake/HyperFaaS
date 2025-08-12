@@ -1,6 +1,7 @@
 import sqlite3
 import pandas as pd
 import json
+from column_names import *
 
 class Data:
     def __init__(self):
@@ -13,46 +14,28 @@ class Data:
         
         conn = sqlite3.connect(db_path)
         
-        query = """
+        query = f"""
         SELECT
             *
-        FROM metrics
+        FROM {METRICS_TABLE}
         """
         
         df = pd.read_sql_query(query, conn)
         conn.close()
         
         # Preprocess timestamps
-        df['callqueuedtimestamp'] = pd.to_datetime(df['callqueuedtimestamp'], unit='ns')
-        df['leafgotrequesttimestamp'] = pd.to_datetime(df['leafgotrequesttimestamp'], unit='ns')
-        df['leafscheduledcalltimestamp'] = pd.to_datetime(df['leafscheduledcalltimestamp'], unit='ns')
-        df['gotresponsetimestamp'] = pd.to_datetime(df['gotresponsetimestamp'], unit='ns')
+        df[CALL_QUEUED_TIMESTAMP] = pd.to_datetime(df[CALL_QUEUED_TIMESTAMP], unit='ns')
+        df[LEAF_GOT_REQUEST_TIMESTAMP] = pd.to_datetime(df[LEAF_GOT_REQUEST_TIMESTAMP], unit='ns')
+        df[LEAF_SCHEDULED_CALL_TIMESTAMP] = pd.to_datetime(df[LEAF_SCHEDULED_CALL_TIMESTAMP], unit='ns')
+        df[GOT_RESPONSE_TIMESTAMP] = pd.to_datetime(df[GOT_RESPONSE_TIMESTAMP], unit='ns')
         
-        # Manual workaround for pandas datetime conversion bug with NaN values
-        # https://github.com/pandas-dev/pandas/pull/61022
-        # https://github.com/pandas-dev/pandas/issues/58419
-        # Convert timeout column
-        timeout_series = df['timeout']
-        timeout_valid_mask = timeout_series.notna()
-        timeout_result = pd.Series(index=timeout_series.index, dtype='datetime64[ns]')
-        if timeout_valid_mask.any():
-            timeout_result.loc[timeout_valid_mask] = pd.to_datetime(timeout_series[timeout_valid_mask], unit='ms')
-        df['timeout'] = timeout_result
-        
-        # Convert error column  
-        error_series = df['error']
-        error_valid_mask = error_series.notna()
-        error_result = pd.Series(index=error_series.index, dtype='datetime64[ns]')
-        if error_valid_mask.any():
-            error_result.loc[error_valid_mask] = pd.to_datetime(error_series[error_valid_mask], unit='ms')
-        df['error'] = error_result
-        
-        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
+        # Convert timestamp column
+        df[TIMESTAMP] = pd.to_datetime(df[TIMESTAMP])
         
         # Add computed latency columns
-        df['scheduling_latency_ms'] = (df['leafscheduledcalltimestamp'] - df['leafgotrequesttimestamp']).dt.total_seconds() * 1000
-        df['leaf_to_worker_latency_ms'] = (df['callqueuedtimestamp'] - df['leafscheduledcalltimestamp']).dt.total_seconds() * 1000
-        df['function_processing_latency_ms'] = (df['gotresponsetimestamp'] - df['callqueuedtimestamp']).dt.total_seconds() * 1000
+        df['scheduling_latency_ms'] = (df[LEAF_SCHEDULED_CALL_TIMESTAMP] - df[LEAF_GOT_REQUEST_TIMESTAMP]).dt.total_seconds() * 1000
+        df['leaf_to_worker_latency_ms'] = (df[CALL_QUEUED_TIMESTAMP] - df[LEAF_SCHEDULED_CALL_TIMESTAMP]).dt.total_seconds() * 1000
+        df['function_processing_latency_ms'] = (df[GOT_RESPONSE_TIMESTAMP] - df[CALL_QUEUED_TIMESTAMP]).dt.total_seconds() * 1000
         
         self.metrics = df
         return df
@@ -64,6 +47,8 @@ class Data:
         SELECT * FROM cpu_mem_stats
         """
         df = pd.read_sql_query(query, conn)
+        # filter out negative timestamps . sometimes happens when memory is almost full
+        df = df[df['timestamp'] >= 0]
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s')
         conn.close()
         return df
@@ -103,9 +88,9 @@ class Data:
             WHERE event = 6 AND status = 0  -- EVENT_RUNNING, STATUS_SUCCESS
         )
         SELECT 
-            s.function_id as function_id,
-            s.instance_id as instance_id,
-            fi.image_tag as image_tag,
+            s.function_id as {FUNCTION_ID},
+            s.instance_id as {INSTANCE_ID},
+            fi.image_tag as {IMAGE_TAG},
             s.start_time as start_time,
             r.running_time as running_time,
             (julianday(r.running_time) - julianday(s.start_time)) * 24 * 60 * 60 * 1000 as cold_start_ms
@@ -201,7 +186,7 @@ class Data:
         # Fill missing combinations with 0
         if not df.empty:
             all_seconds = range(total_duration_seconds)
-            all_image_tags = df['image_tag'].unique()
+            all_image_tags = df[IMAGE_TAG].unique()
             
             # Create complete index
             complete_index = pd.MultiIndex.from_product([all_seconds, all_image_tags], 
