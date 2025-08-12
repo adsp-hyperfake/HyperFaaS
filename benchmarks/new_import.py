@@ -57,7 +57,7 @@ def import_csv_to_sqlite(csv_file='test_results.csv', db_file='metrics.db'):
                     
                     cursor.execute('''
                     INSERT INTO metrics (
-                        timestamp, function_id, image_tag, latency_ms, status, error,
+                        timestamp, function_id, image_tag, grpc_req_duration, status, error,
                         request_size_bytes, response_size_bytes, call_queued_timestamp,
                         got_response_timestamp, instance_id, leaf_got_request_timestamp,
                         leaf_scheduled_call_timestamp, function_processing_time_ns
