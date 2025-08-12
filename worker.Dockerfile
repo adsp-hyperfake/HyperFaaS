@@ -5,12 +5,15 @@ FROM golang:${GO_VERSION}-alpine
 
 WORKDIR /root/
 
+# Install build dependencies for cgo
+RUN apk add --no-cache gcc musl-dev
+
 COPY . .
 COPY ./cmd/worker/main.go .
 
 RUN go mod download
 
 #Copy main function
-RUN GOOS=linux go build -o main main.go
+RUN CGO_ENABLED=1 GOOS=linux go build -o main main.go
 
 CMD ["./main", "-address=0.0.0.0:50051", "-runtime=docker", "-log-level=debug", "-log-format=text", "--auto-remove=true", "-containerized=true", "-caller-server-address=0.0.0.0:50052", "-database-type=http"]

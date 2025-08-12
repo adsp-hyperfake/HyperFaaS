@@ -7,6 +7,7 @@ import { getRandomInt, parseK6Duration } from './utils.js';
 import { SharedArray } from 'k6/data';
 import encoding from 'k6/encoding';
 import http from 'k6/http';
+import { sharedImageData } from './shared-data.js';
 // Load executor functions for each function
 export { bfsFunction };
 export { echoFunction };
@@ -175,8 +176,7 @@ const data = new SharedArray('data', function() {
     },
     scenarios: generatedScenarios
     };
-    const imageDataB64 = encoding.b64encode(open("pic.jpg"));
-    const dataArray = [config, persistenceData, generatedScenarios, imageDataB64];
+    const dataArray = [config, persistenceData, generatedScenarios];
     return dataArray;
 
 });
@@ -186,19 +186,18 @@ export function setup() {
   console.log("bfs", data[1].metadata.bfsFunctionId)
   console.log("echo", data[1].metadata.echoFunctionId)
   console.log("thumbnailer", data[1].metadata.thumbnailerFunctionId)
-  const imageDataB64 = encoding.b64encode(http.get("https://picsum.photos/200/300").body);
   return {
     timeout: data[0].functionTimeoutSeconds,
     address: data[0].address,
     bfs: data[1].metadata.bfsFunctionId,
     echo: data[1].metadata.echoFunctionId,
     thumbnailer: data[1].metadata.thumbnailerFunctionId,
-    imageDataB64: imageDataB64,
     runId: data[0].runId
   };
 }
 
 export const options = {
+  discardResponseBodies: true,
   scenarios: data[2],
   systemTags: ['error', 'group', 'proto', 'scenario', 'service', 'subproto', 'extra_tags', 'metadata', 'vu', 'iter']
 };

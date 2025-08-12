@@ -8,13 +8,16 @@ import (
 	"time"
 
 	kv "github.com/3s-rg-codes/HyperFaaS/pkg/keyValueStore"
+	cr "github.com/3s-rg-codes/HyperFaaS/pkg/worker/containerRuntime"
+	dockerRuntime "github.com/3s-rg-codes/HyperFaaS/pkg/worker/containerRuntime/docker"
+	fakeRuntime "github.com/3s-rg-codes/HyperFaaS/pkg/worker/containerRuntime/fake"
+	"github.com/3s-rg-codes/HyperFaaS/pkg/worker/network"
+	fakeNetwork "github.com/3s-rg-codes/HyperFaaS/pkg/worker/network/fake"
 	"github.com/3s-rg-codes/HyperFaaS/pkg/worker/stats"
 
 	"net/http"
 	_ "net/http/pprof"
 
-	cr "github.com/3s-rg-codes/HyperFaaS/pkg/worker/containerRuntime"
-	dockerRuntime "github.com/3s-rg-codes/HyperFaaS/pkg/worker/containerRuntime/docker"
 	"github.com/3s-rg-codes/HyperFaaS/pkg/worker/controller"
 )
 
@@ -26,9 +29,12 @@ type WorkerConfig struct {
 		ListenerTimeout     int    `env:"LISTENER_TIMEOUT"`
 	}
 	Runtime struct {
-		Type          string `env:"RUNTIME_TYPE"`
-		AutoRemove    bool   `env:"RUNTIME_AUTOREMOVE"`
-		Containerized bool   `env:"RUNTIME_CONTAINERIZED"`
+		Type                string `env:"RUNTIME_TYPE"`
+		AutoRemove          bool   `env:"RUNTIME_AUTOREMOVE"`
+		Containerized       bool   `env:"RUNTIME_CONTAINERIZED"`
+		FakeModelsPath      string `env:"FAKE_MODELS_PATH"`
+		FakeTimeoutDuration int    `env:"FAKE_TIMEOUT_DURATION"`
+		OnnxRuntimePath     string `env:"ONNX_RUNTIME_PATH"`
 	}
 	Log struct {
 		Level    string `env:"LOG_LEVEL"`
@@ -51,7 +57,11 @@ func parseArgs() (wc WorkerConfig) {
 	flag.StringVar(&(wc.Log.Format), "log-format", "text", "Log format (json or text) (Env: LOG_FORMAT)")
 	flag.StringVar(&(wc.Log.FilePath), "log-file", "", "Log file path (defaults to stdout) (Env: LOG_FILE)")
 	flag.BoolVar(&(wc.Runtime.Containerized), "containerized", false, "Use socket to connect to Docker. (Env: RUNTIME_CONTAINERIZED)")
+	flag.StringVar(&(wc.Runtime.FakeModelsPath), "fake-models-path", "models.json", "Path to fake runtime models file. (Env: FAKE_MODELS_PATH)")
+	flag.IntVar(&(wc.Runtime.FakeTimeoutDuration), "fake-timeout-duration", 30, "Fake container timeout duration in seconds. (Env: FAKE_TIMEOUT_DURATION)")
 	flag.Int64Var(&(wc.Stats.UpdateBufferSize), "update-buffer-size", 10000, "Update buffer size. (Env: UPDATE_BUFFER_SIZE)")
+	// The default value for this path is the installation path of the onnxruntime package in the debian worker container when installed with pip3
+	flag.StringVar(&(wc.Runtime.OnnxRuntimePath), "onnxruntime-path", "/usr/local/lib/python3.11/dist-packages/onnxruntime/capi/libonnxruntime.so.1.22.0", "Path to the ONNX runtime. (Env: ONNX_RUNTIME_PATH)")
 	flag.Parse()
 	return
 }
@@ -115,8 +125,6 @@ func main() {
 
 	logger.Info("Current configuration", "config", wc)
 
-	var runtime cr.ContainerRuntime
-
 	statsManager := stats.NewStatsManager(logger, time.Duration(wc.General.ListenerTimeout)*time.Second, 1.0, wc.Stats.UpdateBufferSize)
 
 	var dbAddress string
@@ -133,18 +141,77 @@ func main() {
 		dbClient = kv.NewHttpClient(dbAddress, logger)
 	}
 
-	// Runtime
+	var runtime cr.ContainerRuntime
+	var callRouter network.CallRouterInterface
+
 	switch wc.Runtime.Type {
+
+	// normal, default runtime
 	case "docker":
 		runtime = dockerRuntime.NewDockerRuntime(wc.Runtime.Containerized, wc.Runtime.AutoRemove, wc.General.Address, logger)
-	case "fake":
-		//runtime = mock.NewMockRuntime(logger)
+		callRouter = network.NewCallRouter(logger)
+
+	// Below are fake runtimes. To create new ones, add a new case here.
+	// Fake runtimes need to provide the FunctionModels map to the FakeContainerRuntime constructor.
+	case "fake-linear":
+		// Load models from JSON file
+		linearModels, err := fakeRuntime.LoadLinearModels(wc.Runtime.FakeModelsPath)
+
+		if err != nil {
+			logger.Error("Failed to load models", "error", err)
+			os.Exit(1)
+		}
+
+		models := make(map[string]fakeRuntime.FunctionModel)
+		for k, v := range linearModels {
+			models[k] = &v
+		}
+
+		// Create fake runtime with loaded models
+		fakeContainerRuntime := fakeRuntime.NewFakeContainerRuntime(
+			logger,
+			time.Duration(wc.Runtime.FakeTimeoutDuration)*time.Second,
+			models)
+
+		runtime = fakeContainerRuntime
+		callRouter = fakeNetwork.NewFakeCallRouter(fakeContainerRuntime, logger)
+
+		// fake runtime that returns the same values for all inputs. Useful for debugging.
+	case "fake-instant":
+		models := fakeRuntime.CreateInstantModels([]string{
+			"hyperfaas-echo:latest",
+			"hyperfaas-bfs-json:latest",
+			"hyperfaas-thumbnailer-json:latest",
+		})
+		fakeContainerRuntime := fakeRuntime.NewFakeContainerRuntime(
+			logger,
+			time.Duration(wc.Runtime.FakeTimeoutDuration)*time.Second,
+			models)
+		runtime = fakeContainerRuntime
+		callRouter = fakeNetwork.NewFakeCallRouter(fakeContainerRuntime, logger)
+
+		// Uses the onnx runtime. Please make sure to set --onnxruntime-path to the correct path.
+		// The model file names are hard coded for simplicity and assumed to be the ones below.
+	case "fake-onnx":
+		models, err := fakeRuntime.LoadOnnxModels(wc.Runtime.FakeModelsPath, map[string]string{
+			"hyperfaas-echo:latest":             "echo.onnx",
+			"hyperfaas-bfs-json:latest":         "bfs-json.onnx",
+			"hyperfaas-thumbnailer-json:latest": "thumbnailer-json.onnx",
+		}, wc.Runtime.OnnxRuntimePath)
+		if err != nil {
+			logger.Error("Failed to load models", "error", err)
+			os.Exit(1)
+		}
+		fakeContainerRuntime := fakeRuntime.NewFakeContainerRuntime(logger, time.Duration(wc.Runtime.FakeTimeoutDuration)*time.Second, models)
+		runtime = fakeContainerRuntime
+		callRouter = fakeNetwork.NewFakeCallRouter(fakeContainerRuntime, logger)
+
 	default:
 		logger.Error("No runtime specified")
 		os.Exit(1)
 	}
 
-	c := controller.NewController(runtime, statsManager, logger, wc.General.Address, dbClient)
+	c := controller.NewController(runtime, statsManager, callRouter, logger, wc.General.Address, dbClient)
 
 	c.StartServer()
 }

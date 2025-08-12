@@ -73,8 +73,9 @@ d:
 # Running Faked HyperFaaS
 ############################
 
-fake-start bfs_model='bfs_0713_1155.onnx' echo_model='echo_0713_1210.onnx' thumbnailer_model='thumbnailer_0713_1211.onnx':
-    BFS_MODEL={{bfs_model}} ECHO_MODEL={{echo_model}} THUMBNAILER_MODEL={{thumbnailer_model}} WORKER_TYPE=fake-worker docker compose up --scale worker=0 fake-worker leaf database -d --build
+# make sure that the onnx models are in hyperFakeModel/
+fake-start runtime_type:
+    FAKE_RUNTIME_TYPE={{runtime_type}} WORKER_TYPE=fake-worker docker compose up --scale worker=0 fake-worker leaf database -d --build
 fake-stop:
     WORKER_TYPE=fake-worker docker compose down
 fake-restart:
@@ -172,7 +173,7 @@ run-full-pipeline time="1m" total_runs="3" address="localhost:50050":
     #!/bin/bash
     # run the load generation
     just load-generator/register-functions {{address}}
-    just load-generator/run-sequential {{total_runs}} {{time}} {{address}}
+    ulimit -n 250000 && just load-generator/run-sequential {{total_runs}} {{time}} {{address}}
     # call pull metrics script : this will fail unless you have it locally
     # This script lives outside the repo - its infra specific
     ../pull_metrics.sh
@@ -192,6 +193,18 @@ run-full-pipeline time="1m" total_runs="3" address="localhost:50050":
     mv ./load-generator/generated_scenarios_*.json ~/training_data/${timestamp}/
     mkdir -p ~/training_data/${timestamp}/plots
     mv ./benchmarks/plots/* ~/training_data/${timestamp}/plots/
+
+run-seeded-workload time="1m" total_runs="3" address="localhost:50050" prefix="":
+    echo "Make sure to have generated seeds.txt in load-generator/seeds.txt"
+    just load-generator/register-functions {{address}}
+    ulimit -n 250000 &&just load-generator/run-sequential {{total_runs}} {{time}} {{address}} true
+
+    ../pull_metrics.sh
+    just load-generator/export-sequential
+
+    mkdir -p ~/model-runs/${prefix}
+    mv ./benchmarks/metrics.db ~/model-runs/${prefix}/metrics.db
+    mv ./load-generator/generated_scenarios_*.json ~/model-runs/${prefix}/
 
 allow-reuse-connections:
     # Allow reusing TIME_WAIT sockets for new connections when safe
