@@ -147,7 +147,7 @@ load-test:
     go run ./tests/leaf/main.go
 
 metrics-analyse:
-    cd benchmarks && uv run main.py --analyse --db-path metrics.db --scenarios-path ../load-generator/generated_scenarios_run_1.json --plot-save-path ./plots/
+    cd benchmarks && uv run main.py --analyse --db-path metrics.db --plot-save-path ./plots/
 
 metrics-plot:
     cd benchmarks && uv run plot.py--plot --prefix $(date +%Y-%m-%d) --plot-save-path ./plots/
@@ -169,42 +169,26 @@ metrics-verify:
 ############################
 # Data pipeline
 ############################
-run-full-pipeline time="1m" total_runs="3" address="localhost:50050":
+run-full-pipeline config_file="benchmarks/configs/10m.yaml" out_file="benchmarks/results.csv":
     #!/bin/bash
     # run the load generation
-    just load-generator/register-functions {{address}}
-    ulimit -n 250000 && just load-generator/run-sequential {{total_runs}} {{time}} {{address}}
+    go run cmd/load-generator/main.go --config {{config_file}} --out {{out_file}}
     # call pull metrics script : this will fail unless you have it locally
     # This script lives outside the repo - its infra specific
     ../pull_metrics.sh
     # process the metrics
-    just load-generator/export-sequential
+    cd benchmarks && uv run new_import.py --csv {{out_file}} --db metrics.db
 
-    just load-generator/process-sequential
+    cd benchmarks && uv run process.py --db-path metrics.db
 
-    just load-generator/scenarios-sequential
-
-    just load-generator/plot-sequential
+    cd benchmarks && uv run main.py --plot --db-path metrics.db --plot-save-path ./plots/ --prefix {{config_file}}
 
     # Move the experiment run to the training data folder
     timestamp=$(date +%Y-%m-%d_%H-%M-%S)
     mkdir -p ~/training_data/${timestamp}
     mv ./benchmarks/metrics.db ~/training_data/${timestamp}/metrics.db
-    mv ./load-generator/generated_scenarios_*.json ~/training_data/${timestamp}/
     mkdir -p ~/training_data/${timestamp}/plots
     mv ./benchmarks/plots/* ~/training_data/${timestamp}/plots/
-
-run-seeded-workload time="1m" total_runs="3" address="localhost:50050" prefix="":
-    echo "Make sure to have generated seeds.txt in load-generator/seeds.txt"
-    just load-generator/register-functions {{address}}
-    ulimit -n 250000 &&just load-generator/run-sequential {{total_runs}} {{time}} {{address}} true
-
-    ../pull_metrics.sh
-    just load-generator/export-sequential
-
-    mkdir -p ~/model-runs/${prefix}
-    mv ./benchmarks/metrics.db ~/model-runs/${prefix}/metrics.db
-    mv ./load-generator/generated_scenarios_*.json ~/model-runs/${prefix}/
 
 allow-reuse-connections:
     # Allow reusing TIME_WAIT sockets for new connections when safe
@@ -213,32 +197,6 @@ watch-connections:
     watch -n 1 'ss -a | grep 10.0.0.3:50050 | wc -l'
 see-connections:
     ss -a | grep 10.0.0.3:50050 | awk '{print $2}' | sort | uniq -c
-
-clean-metrics:
-    rm ./benchmarks/metrics.db 2> /dev/null
-    rm ./load-generator/generated_scenarios.json 2> /dev/null
-    rm ./load-generator/test_results.csv 2> /dev/null
-    rm ./load-generator/stderr_output.txt 2> /dev/null
-
-create-original-data-plot:
-    just start
-    just load-generator/run-sequential
-    just load-generator/export-sequential
-    mv ./benchmarks/metrics.db ./benchmarks/metrics_original.db
-    docker compose down    
-
-create-fake-data-plot:
-    just fake-start
-    just load-generator/run-sequential
-    just load-generator/export-sequential
-    mv ./benchmarks/metrics.db ./benchmarks/metrics_model.db
-    docker compose down
-
-plot-comparison:
-    cd benchmarks/ && uv run main.py --plot \
-    --db-paths metrics_original.db metrics_model.db \
-    --plot-save-path ./plots/ \
-    --prefix comparison_
 
 ############################
 # Misc. Stuff
