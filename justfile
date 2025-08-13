@@ -169,10 +169,10 @@ metrics-verify:
 ############################
 # Data pipeline
 ############################
-run-full-pipeline config_file="benchmarks/configs/10m.yaml" out_file="benchmarks/results.csv":
+run-full-pipeline config_file="benchmarks/configs/10m.yaml" out_file="results.csv":
     #!/bin/bash
     # run the load generation
-    go run cmd/load-generator/main.go --config {{config_file}} --out {{out_file}}
+    go run cmd/load-generator/main.go --config {{config_file}} --out benchmarks/{{out_file}}
     # call pull metrics script : this will fail unless you have it locally
     # This script lives outside the repo - its infra specific
     ../pull_metrics.sh
