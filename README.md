@@ -134,6 +134,29 @@ cd ..
 just metrics-analyse
 ```
 
-## hyperFake
+# HyperFake
+The HyperFake project aims to provide a simulated HyperFaaS worker that is as close as possible to the real worker.
+To do this, we use different models to simulate the behavior of the real worker. Because the most compute and memory intensive part of the worker is (most likely) the function execution, we train a model per function image to predict the execution time and its resource usage.
+Additionally, we provide a set of tools to generate load, measure metrics and train models.
+
+## Generating Data
+We have modified the normal HyperFaaS components to collect metrics. To generate data, you have to first run HyperFaaS:
+```
+just start
+```
+To improve the quality of the results, you probably want to run HyperFaaS and the load generator in different VMs/ machines.
+In the machine where you run the load generator, create or use a config file. You can see the existing config files in the `benchmarks/configs` folder.
+
+Then, you can run the load generator:
+```
+just run-full-pipeline <config_file> <out_file>
+```
+The `out_file` is the csv file where the load generator will save the results.
+The results will automatically be processed and saved to a sqlite database inside the `benchmarks` folder.
+
+Now you are ready to train models.
+
+## Training Models
+TODO
 
 ### [hyperFake Model](./hyperFakeModel/README.md)
