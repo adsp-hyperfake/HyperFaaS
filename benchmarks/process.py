@@ -5,17 +5,7 @@ import numpy as np
 from typing import Dict, List, Tuple
 import argparse
 from tqdm import tqdm
-
-# METRICS TABLE
-# timestamp is in seconds, rest is in nanoseconds
-# sqlite> select timestamp, leafgotrequesttimestamp, leafscheduledcalltimestamp,callqueuedtimestamp,gotresponsetimestamp from metrics limit 1;
-# 1749539245|1.74953924495481e+18|1.7495392457413e+18|1.74953924574153e+18|1.74953924574764e+18
-
-# CPU_MEM_STATS TABLE
-# timestamp is in seconds
-# sqlite> select timestamp from cpu_mem_stats limit 1;
-# 1749539243
-
+from column_names import *
 class TrainingData:
     def __init__(self, db_path: str, active_calls_window_size: int):
         """Initialize the database processor with the path to the SQLite database."""
@@ -40,20 +30,21 @@ class TrainingData:
 
     def create_training_data_table(self):
         """Create the training_data table with the specified schema."""
-        create_table_sql = """
+        create_table_sql = f"""
         CREATE TABLE IF NOT EXISTS training_data (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            request_id TEXT,
-            function_image_tag TEXT,
-            timestamp INTEGER,
-            request_body_size INTEGER,
-            function_instances_count INTEGER,
-            active_function_calls_count INTEGER,
-            worker_cpu_usage REAL,
-            worker_ram_usage INTEGER,
-            function_runtime INTEGER,
-            function_cpu_usage REAL,
-            function_ram_usage INTEGER
+            {REQUEST_ID} TEXT,
+            {IMAGE_TAG} TEXT,
+            {TIMESTAMP} INTEGER,
+            {STATUS} TEXT,
+            {REQUEST_SIZE_BYTES} INTEGER,
+            {FUNCTION_INSTANCES_COUNT} INTEGER,
+            {ACTIVE_FUNCTION_CALLS_COUNT} INTEGER,
+            {WORKER_CPU_USAGE} REAL,
+            {WORKER_RAM_USAGE} INTEGER,
+            {FUNCTION_PROCESSING_TIME_NS} INTEGER,
+            {FUNCTION_CPU_USAGE} REAL,
+            {FUNCTION_RAM_USAGE} INTEGER
         );
         """
 
@@ -68,38 +59,40 @@ class TrainingData:
 
     def get_metrics_data(self) -> pd.DataFrame:
         """Fetch all metrics data with optimized data types."""
-        query = """
+        query = f"""
         SELECT
-            request_id,
-            timestamp,
-            instance_id,
-            image_tag,
-            grpc_req_duration,
-            callqueuedtimestamp,
-            gotresponsetimestamp,
-            leafgotrequesttimestamp,
-            leafscheduledcalltimestamp,
-            functionprocessingtime,
-            data_sent,
-            data_received
-        FROM metrics
-        WHERE request_id IS NOT NULL
-        ORDER BY timestamp
+            {REQUEST_ID},
+            {TIMESTAMP},
+            {INSTANCE_ID},
+            {IMAGE_TAG},
+            {STATUS},
+            {GRPC_REQ_DURATION},
+            {CALL_QUEUED_TIMESTAMP},
+            {GOT_RESPONSE_TIMESTAMP},
+            {LEAF_GOT_REQUEST_TIMESTAMP},
+            {LEAF_SCHEDULED_CALL_TIMESTAMP},
+            {FUNCTION_PROCESSING_TIME_NS},
+            {REQUEST_SIZE_BYTES},
+            {RESPONSE_SIZE_BYTES}
+        FROM {METRICS_TABLE}
+        WHERE {REQUEST_ID} IS NOT NULL
+        ORDER BY {TIMESTAMP}
         """
 
         try:
             df = pd.read_sql_query(query, self.conn)
 
-            # everything to nanoseconds
-            df['timestamp'] = pd.to_numeric(df['timestamp'], downcast='float') * 1e9
-            df['callqueuedtimestamp'] = pd.to_numeric(df['callqueuedtimestamp'], downcast='float')
-            df['gotresponsetimestamp'] = pd.to_numeric(df['gotresponsetimestamp'], downcast='float')
-            df['leafgotrequesttimestamp'] = pd.to_numeric(df['leafgotrequesttimestamp'], downcast='float')
-            df['leafscheduledcalltimestamp'] = pd.to_numeric(df['leafscheduledcalltimestamp'], downcast='float')
+            # Convert timestamp from ISO format to nanoseconds
+            df[TIMESTAMP] = pd.to_datetime(df[TIMESTAMP]).astype(np.int64)
 
-            df['functionprocessingtime'] = pd.to_numeric(df['functionprocessingtime'], downcast='float')
-            df['data_sent'] = pd.to_numeric(df['data_sent'], downcast='integer', errors='coerce')
-            df['data_received'] = pd.to_numeric(df['data_received'], downcast='integer', errors='coerce')
+            df[CALL_QUEUED_TIMESTAMP] = pd.to_numeric(df[CALL_QUEUED_TIMESTAMP], downcast='float')
+            df[GOT_RESPONSE_TIMESTAMP] = pd.to_numeric(df[GOT_RESPONSE_TIMESTAMP], downcast='float')
+            df[LEAF_GOT_REQUEST_TIMESTAMP] = pd.to_numeric(df[LEAF_GOT_REQUEST_TIMESTAMP], downcast='float')
+            df[LEAF_SCHEDULED_CALL_TIMESTAMP] = pd.to_numeric(df[LEAF_SCHEDULED_CALL_TIMESTAMP], downcast='float')
+
+            df[FUNCTION_PROCESSING_TIME_NS] = pd.to_numeric(df[FUNCTION_PROCESSING_TIME_NS], downcast='float')
+            df[REQUEST_SIZE_BYTES] = pd.to_numeric(df[REQUEST_SIZE_BYTES], downcast='integer', errors='coerce')
+            df[RESPONSE_SIZE_BYTES] = pd.to_numeric(df[RESPONSE_SIZE_BYTES], downcast='integer', errors='coerce')
 
             print(f"Fetched {len(df)} metrics records")
             return df
@@ -109,30 +102,30 @@ class TrainingData:
 
     def get_cpu_mem_stats(self) -> pd.DataFrame:
         """Fetch CPU and memory statistics with optimized data types."""
-        query = """
+        query = f"""
         SELECT
-            instance_id,
-            function_id,
-            image_tag,
-            timestamp,
-            cpu_usage_percent,
-            memory_usage,
-            memory_usage_limit,
-            memory_usage_percent
-        FROM cpu_mem_stats
-        ORDER BY timestamp
+            {INSTANCE_ID},
+            {FUNCTION_ID},
+            {IMAGE_TAG},
+            {TIMESTAMP},
+            {CPU_USAGE_PERCENT},
+            {MEMORY_USAGE},
+            {MEMORY_USAGE_LIMIT},
+            {MEMORY_USAGE_PERCENT}
+        FROM {CPU_MEM_STATS_TABLE}
+        ORDER BY {TIMESTAMP}
         """
 
         try:
             df = pd.read_sql_query(query, self.conn)
 
             # everything to nanoseconds
-            df['timestamp'] = pd.to_numeric(df['timestamp'], downcast='float') * 1e9
+            df[TIMESTAMP] = pd.to_numeric(df[TIMESTAMP], downcast='float') * 1e9
 
-            df['cpu_usage_percent'] = pd.to_numeric(df['cpu_usage_percent'], downcast='float')
-            df['memory_usage'] = pd.to_numeric(df['memory_usage'], downcast='integer', errors='coerce')
-            df['memory_usage_limit'] = pd.to_numeric(df['memory_usage_limit'], downcast='integer', errors='coerce')
-            df['memory_usage_percent'] = pd.to_numeric(df['memory_usage_percent'], downcast='float')
+            df[CPU_USAGE_PERCENT] = pd.to_numeric(df[CPU_USAGE_PERCENT], downcast='float')
+            df[MEMORY_USAGE] = pd.to_numeric(df[MEMORY_USAGE], downcast='integer', errors='coerce')
+            df[MEMORY_USAGE_LIMIT] = pd.to_numeric(df[MEMORY_USAGE_LIMIT], downcast='integer', errors='coerce')
+            df[MEMORY_USAGE_PERCENT] = pd.to_numeric(df[MEMORY_USAGE_PERCENT], downcast='float')
 
             print(f"Fetched {len(df)} CPU/memory stats records")
             return df
@@ -148,16 +141,16 @@ class TrainingData:
         print("Pre-computing active function calls...")
 
         # What do we define as active function call?
-        start_key = 'callqueuedtimestamp'
-        #end_key = 'gotresponsetimestamp'
-        #start_key = 'leafgotrequesttimestamp'
-        end_key = 'gotresponsetimestamp'
+        start_key = CALL_QUEUED_TIMESTAMP
+        #end_key = GOT_RESPONSE_TIMESTAMP
+        #start_key = LEAF_GOT_REQUEST_TIMESTAMP
+        end_key = GOT_RESPONSE_TIMESTAMP
 
         # window size in milliseconds
         window_size = self.active_calls_window_size
 
         # Get all unique timestamps
-        unique_timestamps = sorted(metrics_df['timestamp'].unique())
+        unique_timestamps = sorted(metrics_df[TIMESTAMP].unique())
         active_calls_dict = {}
 
         # Convert to numpy arrays for faster operations
@@ -181,14 +174,14 @@ class TrainingData:
 
         # Convert timestamp from nanoseconds back to seconds for grouping
         stats_df_copy = stats_df.copy()
-        stats_df_copy['timestamp_seconds'] = (stats_df_copy['timestamp'] / 1e9).astype(int)
+        stats_df_copy['timestamp_seconds'] = (stats_df_copy[TIMESTAMP] / 1e9).astype(int)
 
         # Group by second and compute aggregated stats
         worker_stats = {}
         for timestamp_sec, group in tqdm(stats_df_copy.groupby('timestamp_seconds'), desc="Computing worker stats"):
-            unique_instances = group['instance_id'].nunique()
-            avg_cpu_usage = group['cpu_usage_percent'].mean()
-            avg_memory_usage = group['memory_usage'].mean()
+            unique_instances = group[INSTANCE_ID].nunique()
+            avg_cpu_usage = group[CPU_USAGE_PERCENT].mean()
+            avg_memory_usage = group[MEMORY_USAGE].mean()
 
             worker_stats[timestamp_sec] = {
                 'function_instances_count': int(unique_instances),
@@ -208,11 +201,11 @@ class TrainingData:
 
         # Convert timestamp from nanoseconds back to seconds
         stats_df_copy = stats_df.copy()
-        stats_df_copy['timestamp_seconds'] = (stats_df_copy['timestamp'] / 1e9).astype(int)
+        stats_df_copy['timestamp_seconds'] = (stats_df_copy[TIMESTAMP] / 1e9).astype(int)
 
         instance_stats = {}
         for _, row in tqdm(stats_df_copy.iterrows(), total=len(stats_df_copy), desc="Computing instance stats"):
-            instance_id = row['instance_id']
+            instance_id = row[INSTANCE_ID]
             timestamp_sec = row['timestamp_seconds']
             cpu_usage = float(row['cpu_usage_percent'])
             ram_usage = int(row['memory_usage']) if pd.notna(row['memory_usage']) else 0
@@ -244,13 +237,13 @@ class TrainingData:
         for _, row in tqdm(metrics_df.iterrows(), total=total_requests, desc="Processing requests"):
             # we insert 0 values for all metrics that are not available for now. I think this fks up the training so we should try to find a better way to handle this.
             try:
-                request_id = row['request_id']
-                timestamp = row['timestamp']
-                function_image_tag = row['image_tag']
-                instance_id = row['instance_id']
+                request_id = row[REQUEST_ID]
+                timestamp = row[TIMESTAMP]
+                function_image_tag = row[IMAGE_TAG]
+                instance_id = row[INSTANCE_ID]
 
                 # Calculate request body size
-                request_body_size = int(row['data_sent']) if pd.notna(row['data_sent']) else 0
+                request_body_size = int(row[REQUEST_SIZE_BYTES])
                 active_calls = active_calls_lookup.get(timestamp, 0)
 
                 worker_stats = worker_stats_lookup.get(int(timestamp / 1e9), {
@@ -263,29 +256,30 @@ class TrainingData:
                     (instance_id, int(timestamp / 1e9)), (0.0, 0)
                 )
 
-                if pd.notna(row['functionprocessingtime']):
-                    function_runtime = int(row['functionprocessingtime'])
+                if pd.notna(row[FUNCTION_PROCESSING_TIME_NS]):
+                    function_runtime = int(row[FUNCTION_PROCESSING_TIME_NS])
                 else:
                     continue
 
                 training_record = {
-                    'request_id': request_id,
-                    'timestamp': int(timestamp),
-                    'request_body_size': request_body_size,
-                    'function_image_tag': function_image_tag,
-                    'function_instances_count': int(worker_stats['function_instances_count']),
-                    'active_function_calls_count': int(active_calls),
-                    'worker_cpu_usage': float(worker_stats['worker_cpu_usage']),
-                    'worker_ram_usage': int(worker_stats['worker_ram_usage']),
-                    'function_runtime': int(function_runtime),
-                    'function_cpu_usage': float(function_cpu_usage),
-                    'function_ram_usage': int(function_ram_usage)
+                    REQUEST_ID: request_id,
+                    TIMESTAMP: int(timestamp),
+                    STATUS: row[STATUS],
+                    REQUEST_SIZE_BYTES: request_body_size,
+                    IMAGE_TAG: function_image_tag,
+                    FUNCTION_INSTANCES_COUNT: int(worker_stats['function_instances_count']),
+                    ACTIVE_FUNCTION_CALLS_COUNT: int(active_calls),
+                    WORKER_CPU_USAGE: float(worker_stats['worker_cpu_usage']),
+                    WORKER_RAM_USAGE: int(worker_stats['worker_ram_usage']),
+                    FUNCTION_PROCESSING_TIME_NS: int(function_runtime),
+                    FUNCTION_CPU_USAGE: float(function_cpu_usage),
+                    FUNCTION_RAM_USAGE: int(function_ram_usage)
                 }
 
                 training_data.append(training_record)
 
             except Exception as e:
-                print(f"Error processing record {row.get('request_id', 'unknown')}: {e}")
+                print(f"Error processing record {row.get(REQUEST_ID, 'unknown')}: {e}")
                 continue
 
         print(f"Processed {len(training_data)} training records")
@@ -297,12 +291,21 @@ class TrainingData:
             print("No training data to insert")
             return
 
-        insert_sql = """
+        insert_sql = f"""
         INSERT INTO training_data (
-            request_id, timestamp, request_body_size, function_image_tag, function_instances_count,
-            active_function_calls_count, worker_cpu_usage, worker_ram_usage,
-            function_runtime, function_cpu_usage, function_ram_usage
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            {REQUEST_ID},
+            {TIMESTAMP},
+            {STATUS},
+            {REQUEST_SIZE_BYTES},
+            {IMAGE_TAG},
+            {FUNCTION_INSTANCES_COUNT},
+            {ACTIVE_FUNCTION_CALLS_COUNT},
+            {WORKER_CPU_USAGE},
+            {WORKER_RAM_USAGE},
+            {FUNCTION_PROCESSING_TIME_NS},
+            {FUNCTION_CPU_USAGE},
+            {FUNCTION_RAM_USAGE}
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
 
         try:
@@ -314,17 +317,18 @@ class TrainingData:
             # Insert new data
             for record in training_data:
                 cursor.execute(insert_sql, (
-                    record['request_id'],
-                    record['timestamp'],
-                    record['request_body_size'],
-                    record['function_image_tag'],
-                    record['function_instances_count'],
-                    record['active_function_calls_count'],
-                    record['worker_cpu_usage'],
-                    record['worker_ram_usage'],
-                    record['function_runtime'],
-                    record['function_cpu_usage'],
-                    record['function_ram_usage']
+                    record[REQUEST_ID],
+                    record[TIMESTAMP],
+                    record[STATUS],
+                    record[REQUEST_SIZE_BYTES],
+                    record[IMAGE_TAG],
+                    record[FUNCTION_INSTANCES_COUNT],
+                    record[ACTIVE_FUNCTION_CALLS_COUNT],
+                    record[WORKER_CPU_USAGE],
+                    record[WORKER_RAM_USAGE],
+                    record[FUNCTION_PROCESSING_TIME_NS],
+                    record[FUNCTION_CPU_USAGE],
+                    record[FUNCTION_RAM_USAGE]
                 ))
 
             self.conn.commit()

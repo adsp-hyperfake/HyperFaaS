@@ -1,5 +1,6 @@
 import pandas as pd
 from tabulate import tabulate
+from column_names import *
 
 def aggregate_and_round(df: pd.DataFrame, col: str) -> pd.DataFrame:
     """Aggregate and round the dataframe."""
@@ -17,26 +18,20 @@ def analyze_request_latency(metrics: pd.DataFrame) -> dict:
     """Analyze request latency metrics and return results as dictionary."""
     results = {}
     
-    results['total_requests'] = metrics['request_id'].nunique()
-    results['total_successful'] = metrics['grpc_req_duration'].count()
+    results['total_requests'] = metrics[REQUEST_ID].nunique()
+    results['total_successful'] = metrics[GRPC_REQ_DURATION].count()
     
-    # Request latency by image tag
-    request_latency = aggregate_and_round(metrics.groupby(['image_tag']), 'grpc_req_duration')
+    request_latency = aggregate_and_round(metrics.groupby([IMAGE_TAG]), GRPC_REQ_DURATION)
     results['latency_by_image'] = request_latency
     
-    # Timeouts by image tag
-    timeout_by_image = metrics.groupby(['image_tag'])['timeout'].count()
-    results['timeouts_by_image'] = timeout_by_image
-    results['total_timeouts'] = metrics['timeout'].count()
-    
-    # Errors by image tag
-    error_by_image = metrics.groupby(['image_tag'])['error'].count()
+    error_by_image = metrics.groupby([IMAGE_TAG])[ERROR].count()
     results['errors_by_image'] = error_by_image
-    results['total_errors'] = metrics['error'].count()
+    results['total_errors'] = metrics[ERROR].notna().sum()
     
-    # Request latency by scenario and image tag
-    request_latency_scenario = aggregate_and_round(metrics.groupby(['scenario', 'image_tag']), 'grpc_req_duration')
-    results['latency_by_scenario_image'] = request_latency_scenario
+    # Note: timeout column doesn't exist in new schema but a timeout happened if the error is DeadlineExceeded
+    timeout_by_image = metrics.groupby([IMAGE_TAG])[ERROR].apply(lambda x: x.str.contains('DeadlineExceeded').sum())
+    results['timeouts_by_image'] = timeout_by_image
+    results['total_timeouts'] = timeout_by_image.sum()
     
     return results
 
@@ -44,12 +39,10 @@ def analyze_data_transfer(metrics: pd.DataFrame) -> dict:
     """Analyze data transfer metrics and return results as dictionary."""
     results = {}
     
-    # Data sent by image tag
-    data_sent = aggregate_and_round(metrics.groupby(['image_tag']), 'data_sent')
+    data_sent = aggregate_and_round(metrics.groupby([IMAGE_TAG]), REQUEST_SIZE_BYTES)
     results['data_sent_by_image'] = data_sent
     
-    # Data received by image tag
-    data_received = aggregate_and_round(metrics.groupby(['image_tag']), 'data_received')
+    data_received = aggregate_and_round(metrics.groupby([IMAGE_TAG]), RESPONSE_SIZE_BYTES)
     results['data_received_by_image'] = data_received
     
     return results
@@ -59,27 +52,27 @@ def analyze_cold_starts(metrics: pd.DataFrame, cold_starts: pd.DataFrame) -> dic
     results = {}
     
     # Merge metrics with cold starts on instance_id
-    metrics_by_instance = metrics[['callqueuedtimestamp', 'gotresponsetimestamp', 'instance_id', 'grpc_req_duration']]
-    cold_starts_with_metrics = pd.merge(cold_starts, metrics_by_instance, on='instance_id', how='left')
+    metrics_by_instance = metrics[[CALL_QUEUED_TIMESTAMP, GOT_RESPONSE_TIMESTAMP, INSTANCE_ID, GRPC_REQ_DURATION]]
+    cold_starts_with_metrics = pd.merge(cold_starts, metrics_by_instance, on=INSTANCE_ID, how='left')
     
     # Cold starts per image
-    cold_starts_per_image = aggregate_and_round(cold_starts_with_metrics.groupby('image_tag'), 'cold_start_ms')
+    cold_starts_per_image = aggregate_and_round(cold_starts_with_metrics.groupby(IMAGE_TAG), 'cold_start_ms')
     results['cold_starts_by_image'] = cold_starts_per_image
     
     # Total request latency for cold starts
-    total_request_latency = aggregate_and_round(cold_starts_with_metrics.groupby('image_tag'), 'grpc_req_duration')
+    total_request_latency = aggregate_and_round(cold_starts_with_metrics.groupby(IMAGE_TAG), GRPC_REQ_DURATION)
     results['cold_start_request_latency'] = total_request_latency
     
     return results
 
 def get_function_summary(cold_starts: pd.DataFrame) -> pd.DataFrame:
     """Get summary statistics for each function."""
-    summary = cold_starts.groupby('function_id').agg({
+    summary = cold_starts.groupby(FUNCTION_ID).agg({
         'cold_start_ms': ['mean', 'min', 'max', 'std',
                           lambda x: x.quantile(0.50),
                           lambda x: x.quantile(0.75),
                           lambda x: x.quantile(0.95)],
-        'instance_id': 'count'
+        INSTANCE_ID: 'count'
     }).round(2)
 
     # Flatten multi-index columns
@@ -93,7 +86,7 @@ def analyze_k6_scenarios_summary(scenarios_df: pd.DataFrame) -> dict:
     results = {}
     
     # Summary by image tag
-    summary = scenarios_df.groupby('image_tag')['expected_rps'].agg(['mean', 'max', 'sum']).round(2)
+    summary = scenarios_df.groupby(IMAGE_TAG)['expected_rps'].agg(['mean', 'max', 'sum']).round(2)
     summary.columns = ['avg_rps', 'peak_rps', 'total_requests']
     results['summary_by_image'] = summary
     

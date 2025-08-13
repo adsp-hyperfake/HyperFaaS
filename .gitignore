@@ -407,3 +407,4 @@ benchmarks/metrics.db
 hyperFakeModel/neural-network/**/*.json
 hyperFakeModel/neural-network/**/*.onnx
 hyperFakeModel/neural-network/**/*.db
+benchmarks/*.csv

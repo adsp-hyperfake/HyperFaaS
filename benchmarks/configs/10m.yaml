@@ -1,0 +1,73 @@
+leaf_address: 10.0.0.3:50050
+max_duration: 5m
+timeout: 60
+generate_workload: true
+seed: 123
+function_config:
+  hyperfaas-echo:latest:
+    memory: 256MB
+    cpu:
+      period: 100000
+      quota: 50000
+  hyperfaas-bfs-json:latest:
+    memory: 2GB
+    cpu:
+      period: 100000
+      quota: 50000
+  hyperfaas-thumbnailer-json:latest:
+    memory: 3GB
+    cpu:
+      period: 100000
+      quota: 100000
+patterns:
+  echo:
+    image_tag: hyperfaas-echo:latest
+    phase_count:
+      min: 12
+      max: 13
+    constant_likelihood: 0.5
+    ramping_likelihood: 0.5
+    parameters:
+      start_rps:
+        min: 50
+        max: 100
+      end_rps:
+        min: 1500
+        max: 2000
+      step:
+        min: 20
+        max: 30
+  bfs:
+    image_tag: hyperfaas-bfs-json:latest
+    phase_count:
+      min: 12
+      max: 13
+    constant_likelihood: 0.5
+    ramping_likelihood: 0.5
+    parameters:
+      start_rps:
+        min: 50
+        max: 100
+      end_rps:
+        min: 300
+        max: 400
+      step:
+        min: 20
+        max: 30
+  thumbnailer:
+    image_tag: hyperfaas-thumbnailer-json:latest
+    phase_count:
+      min: 12
+      max: 13
+    constant_likelihood: 0.5
+    ramping_likelihood: 0.5
+    parameters:
+      start_rps:
+        min: 5
+        max: 10
+      end_rps:
+        min: 30
+        max: 50
+      step:
+        min: 2
+        max: 5
