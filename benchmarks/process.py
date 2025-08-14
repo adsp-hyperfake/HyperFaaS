@@ -285,6 +285,79 @@ class TrainingData:
         print(f"Processed {len(training_data)} training records")
         return training_data
 
+
+    def avg_one_to_n_relations(self):
+        """Creates a new table training_data_avg with averaged one-to-n relations."""
+        
+        print("Averaging up 1 to n relations...")
+
+        avg_sql = f"""
+            INSERT INTO training_data_avg (
+                id,
+                {REQUEST_ID},
+                {TIMESTAMP},
+                {STATUS},
+                
+                {IMAGE_TAG},
+                {REQUEST_SIZE_BYTES},
+                {FUNCTION_INSTANCES_COUNT},
+                {ACTIVE_FUNCTION_CALLS_COUNT},
+                {WORKER_CPU_USAGE},
+                {WORKER_RAM_USAGE},
+                
+                {FUNCTION_PROCESSING_TIME_NS},
+                {FUNCTION_CPU_USAGE},
+                {FUNCTION_RAM_USAGE}
+            )
+            SELECT
+                -- use min for non-inputs
+                MIN(id) as id,                      
+                MIN({REQUEST_ID}) as {REQUEST_ID},  
+                MIN({TIMESTAMP}) as {TIMESTAMP},     
+                MIN({STATUS}) as {STATUS},          
+                
+                -- group by inputs
+                {IMAGE_TAG},
+                {REQUEST_SIZE_BYTES},
+                {FUNCTION_INSTANCES_COUNT},
+                {ACTIVE_FUNCTION_CALLS_COUNT},
+                {WORKER_CPU_USAGE},
+                {WORKER_RAM_USAGE},
+                
+                -- average output
+                AVG(CAST({FUNCTION_PROCESSING_TIME_NS} AS REAL)) as {FUNCTION_PROCESSING_TIME_NS},  
+                AVG({FUNCTION_CPU_USAGE}) as {FUNCTION_CPU_USAGE},                                  
+                AVG(CAST({FUNCTION_RAM_USAGE} AS REAL)) as {FUNCTION_RAM_USAGE}                     
+            FROM training_data
+            GROUP BY
+                {REQUEST_SIZE_BYTES},
+                {IMAGE_TAG},
+                {FUNCTION_INSTANCES_COUNT},
+                {ACTIVE_FUNCTION_CALLS_COUNT},
+                {WORKER_CPU_USAGE},
+                {WORKER_RAM_USAGE}
+            """
+
+        try:
+            cursor = self.conn.cursor()
+            
+            cursor.execute("CREATE TABLE IF NOT EXISTS training_data_avg AS SELECT * FROM training_data WHERE 0")
+            cursor.execute("DELETE FROM training_data_avg")
+            
+            cursor.execute(avg_sql)
+            rows_affected = cursor.rowcount
+
+            self.conn.commit()
+            print(
+                f"Successfully averaged data - {rows_affected} grouped records created")
+            return rows_affected
+        
+        except sqlite3.Error as e:
+            print(f"Error averaging up 1 to n relations: {e}")
+            self.conn.rollback()
+            raise
+
+
     def insert_training_data(self, training_data: List[Dict]):
         """Insert the processed training data into the training_data table."""
         if not training_data:
@@ -350,6 +423,8 @@ class TrainingData:
                 print("Training data processing completed successfully")
             else:
                 print("No training data was generated")
+                
+            self.avg_one_to_n_relations()
         except Exception as e:
             print(f"Error during processing: {e}")
             raise
