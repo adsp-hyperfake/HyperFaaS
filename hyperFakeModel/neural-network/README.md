@@ -21,12 +21,11 @@ Commands:
 Usage: neural_net_cli.py optuna [OPTIONS]
 
 Options:
+  --cpu                         Use CPU for training instead of GPU
   --dbs-dir PATH                Path to directory containing database files
-                                [default: /path/to/HyperFaaS/hyperFakeModel/
-                                training_dbs]
+                                [default: /path/to/HyperFaaS/hyperFakeModel/training_dbs]
   --export-dir PATH             Target directory for saving the trained models
-                                [default: /path/to/HyperFaaS/hyperFakeModel/
-                                neural-network/models]
+                                [default: /path/to/HyperFaaS/hyperFakeModel/neural-network/models]
   --func-tag TEXT               Function tags to train (can be specified
                                 multiple times)  [default: hyperfaas-bfs-
                                 json:latest, hyperfaas-thumbnailer-
@@ -36,6 +35,14 @@ Options:
   --table-name TEXT             The db's table name containing the training
                                 data  [default: training_data]
   --sample-data                 Use sample data instead of real data
+  --input-cols TEXT             Input columns for training (can be specified
+                                multiple times)  [default: request_body_size,
+                                function_instances_count,
+                                active_function_calls_count, worker_cpu_usage,
+                                worker_ram_usage]
+  --output-cols TEXT            Output columns for training (can be specified
+                                multiple times)  [default: function_runtime,
+                                function_cpu_usage, function_ram_usage]
   --trials INTEGER RANGE        Number of trials  [default: 20; x>=1]
   --jobs INTEGER RANGE          Number of parallel jobs (-1 for # of CPUs)
                                 [default: 5; x>=-1]
@@ -55,12 +62,11 @@ Options:
 Usage: neural_net_cli.py manual [OPTIONS]
 
 Options:
+  --cpu                    Use CPU for training instead of GPU
   --dbs-dir PATH           Path to directory containing database files
-                           [default: /path/to/HyperFaaS/hyperFak
-                           eModel/training_dbs]
+                           [default: /path/to/HyperFaaS/hyperFakeModel/training_dbs]
   --export-dir PATH        Target directory for saving the trained models
-                           [default: /path/to/HyperFaaS/hyperFakeModel/
-                           neural-network/models]
+                           [default: /path/to/HyperFaaS/hyperFakeModel/neural-network/models]
   --func-tag TEXT          Function tags to train (can be specified multiple
                            times)  [default: hyperfaas-bfs-json:latest,
                            hyperfaas-thumbnailer-json:latest, hyperfaas-
@@ -70,6 +76,14 @@ Options:
   --table-name TEXT        The db's table name containing the training data
                            [default: training_data]
   --sample-data            Use sample data instead of real data
+  --input-cols TEXT        Input columns for training (can be specified
+                           multiple times)  [default: request_body_size,
+                           function_instances_count,
+                           active_function_calls_count, worker_cpu_usage,
+                           worker_ram_usage]
+  --output-cols TEXT       Output columns for training (can be specified
+                           multiple times)  [default: function_runtime,
+                           function_cpu_usage, function_ram_usage]
   --hyperparams PATH       Path to hyperparameters json file
   --epochs INTEGER RANGE   Number of training epochs  [default: 100; x>=1]
   --samples INTEGER RANGE  Number of samples to train on [-1 uses all data]
