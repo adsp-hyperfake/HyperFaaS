@@ -292,6 +292,7 @@ def train_model(
     criterion,
     optimizer,
     scheduler,
+    gradient_clipping,
     num_epochs=100,
     patience=25,
 ):
@@ -310,7 +311,7 @@ def train_model(
     print("-" * 60)
 
     for epoch in tqdm(range(num_epochs), desc="Training Epochs", ncols=100):
-        train_loss = train_epoch(cpu, model, train_data_loader, criterion, optimizer)
+        train_loss = train_epoch(cpu, model, train_data_loader, criterion, optimizer, gradient_clipping)
 
         # Evaluate on validation set
         val_loss, _, _ = evaluate_model(cpu, model, val_data_loader, criterion)
@@ -352,7 +353,7 @@ def train_model(
     return train_losses, val_losses
 
 
-def train_epoch(cpu, model, train_data_loader, criterion, optimizer):
+def train_epoch(cpu, model, train_data_loader, criterion, optimizer, gradient_clipping):
     """Train the model for one epoch."""
     model.train()
     total_loss = 0.0
@@ -371,7 +372,8 @@ def train_epoch(cpu, model, train_data_loader, criterion, optimizer):
         loss = criterion(prodictions_normalized, targets_normalized)
         # backward pass
         loss.backward()
-        # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        if gradient_clipping:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         # update weights
         optimizer.step()
 
@@ -535,6 +537,7 @@ def setup_model_training(
             "batch_size": 64,
             "patience": 10,
             "optimizer": "Adam",
+            "gradient_clipping": True,
         }
 
     print(hyperparams)
@@ -559,6 +562,8 @@ def setup_model_training(
         hyperparams["optimizer"],
         scheduler_patience=10,
     )
+    print(hyperparams)
+    gradient_clipping = hyperparams["gradient_clipping"]
 
     model.set_scalers(train_dataset.scaler_X, train_dataset.scaler_y)
 
@@ -571,6 +576,7 @@ def setup_model_training(
         criterion,
         optimizer,
         scheduler,
+        gradient_clipping,
         num_epochs=epochs,
         patience=hyperparams["patience"],
     )
@@ -614,7 +620,9 @@ def optuna_objective(trial, X, y, epochs, cpu: bool):
         dropouts.append(dropout)
 
     # optimizer_name = trial.suggest_categorical("optimizer", ["Adam", "SGD", "RMSprop"])
+    # SGD and RMSprop didn't perform well
     optimizer_name = trial.suggest_categorical("optimizer", ["Adam"])
+    gradient_clipping = trial.suggest_categorical("gradient_clipping", [True, False])
     lr = trial.suggest_float("lr", 1e-5, 1e-2, log=True)
     weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-2, log=True)
     batch_size = trial.suggest_categorical("batch_size", [16, 32, 64, 128])
@@ -653,6 +661,7 @@ def optuna_objective(trial, X, y, epochs, cpu: bool):
         criterion,
         optimizer,
         scheduler,
+        gradient_clipping,
         num_epochs=epochs,
         patience=patience,
     )
@@ -701,6 +710,7 @@ def run_optuna_study(
         "batch_size": study.best_params["batch_size"],
         "patience": study.best_params["patience"],
         "optimizer": study.best_params["optimizer"],
+        "gradient_clipping": study.best_params["gradient_clipping"],
     }
 
     onnx_export_path = os.path.join(export_dir, f"{identifier}.onnx")

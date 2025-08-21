@@ -267,6 +267,7 @@ def _read_and_validate_hyperparams(file_path):
         "batch_size",
         "patience",
         "optimizer",
+        "gradient_clipping",
     ]
     for key in required_keys:
         assert key in hyperparams, f"Missing key: {key}"
