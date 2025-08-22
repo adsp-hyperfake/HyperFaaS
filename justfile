@@ -173,9 +173,8 @@ run-full-pipeline config_file="benchmarks/configs/10m.yaml" out_file="results.cs
     #!/bin/bash
     # run the load generation
     go run cmd/load-generator/main.go --config {{config_file}} --out benchmarks/{{out_file}}
-    # call pull metrics script : this will fail unless you have it locally
-    # This script lives outside the repo - its infra specific
-    ../pull_metrics.sh
+    # call pull metrics script : this will fail unless you configure it correctly
+    ./pull-metrics.sh
     # process the metrics
     cd benchmarks && uv run new_import.py --csv {{out_file}} --db metrics.db
 
