@@ -105,35 +105,6 @@ Remove all Docker containers/images and logs:
 just clean
 ```
 
-
-## Benchmarks and Metrics
-
-To generate preliminary data and test metric generation, you can do the following:
-
-```
-# Build all images if you haven't already
-just build
-
-# Start HyperFaaS
-just start
-
-# Start the metrics client
-just metrics-client
-
-# Run preliminary load generation
-cd load-generator
-# Configure the load generation via environment variables in the justfile
-just run-seeded
-
-# When the load generation is done, you can stop the metrics client
-# Export the metrics
-just export
-
-# Analyse metrics
-cd ..
-just metrics-analyse
-```
-
 # HyperFake
 The HyperFake project aims to provide a simulated HyperFaaS worker that is as close as possible to the real worker.
 To do this, we use different models to simulate the behavior of the real worker. Because the most compute and memory intensive part of the worker is (most likely) the function execution, we train a model per function image to predict the execution time and its resource usage.
@@ -144,8 +115,15 @@ We have modified the normal HyperFaaS components to collect metrics. To generate
 ```
 just start
 ```
+In another terminal, run the metrics client:
+```
+just metrics-client
+```
+
 To improve the quality of the results, you probably want to run HyperFaaS and the load generator in different VMs/ machines.
+
 In the machine where you run the load generator, create or use a config file. You can see the existing config files in the `benchmarks/configs` folder.
+We have a script `pull-metrics.sh` that will pull the metrics from the SUT and save them to a local database. Make sure to configure it correctly.
 
 Then, you can run the load generator:
 ```
@@ -153,6 +131,7 @@ just run-full-pipeline <config_file> <out_file>
 ```
 The `out_file` is the csv file where the load generator will save the results.
 The results will automatically be processed and saved to a sqlite database inside the `benchmarks` folder.
+After that, everything gets moved to the `~/training_data` folder.
 
 Now you are ready to train models.
 
@@ -160,3 +139,25 @@ Now you are ready to train models.
 TODO
 
 ### [hyperFake Model](./hyperFakeModel/README.md)
+
+## HyperFake Workers
+There is two implementations of the HyperFake worker, one in Python (./hyperFakeWorker/) and one in Go, which is a modification of the real worker.
+The Go implementation is the one that was last used for the experiments.
+In order to run the Go fake worker, you just have to provide the appropiate flags to it.
+We recommend doing so with the justfile command:
+
+```justfile
+# make sure that the onnx models are in hyperFakeModel/
+fake-start runtime_type:
+    FAKE_RUNTIME_TYPE={{runtime_type}} WORKER_TYPE=fake-worker docker compose up --scale worker=0 fake-worker leaf database -d --build
+```
+If the runtime type is `fake-onnx`, the worker will load the onnx models using a hard coded mapping for simplicity:
+
+```
+"hyperfaas-echo:latest":             "echo.onnx",
+"hyperfaas-bfs-json:latest":         "bfs-json.onnx",
+"hyperfaas-thumbnailer-json:latest": "thumbnailer-json.onnx",
+```
+### Adding new models
+
+To add new models, you have to modify the main.go of the worker and include a new mapping of the image name to the model name, and make sure to add the model to the `./hyperFakeModel/` folder.
