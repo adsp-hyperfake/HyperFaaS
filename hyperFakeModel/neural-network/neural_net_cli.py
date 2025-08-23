@@ -45,7 +45,7 @@ def shared_training_options(func):
     @click.option(
         "--short-name",
         multiple=True,
-        default=("bfs", "thumbnailer", "echo"),
+        default=("bfs-json", "thumbnailer-json", "echo"),
         show_default=True,
         help="Short names corresponding to function tags",
     )
@@ -123,7 +123,7 @@ def cli():
 @click.option(
     "--final-epochs",
     default=100,
-    type=click.IntRange(1, None),
+    type=click.IntRange(0, None),
     show_default=True,
     help="Number of training epochs for the final exported model",
 )

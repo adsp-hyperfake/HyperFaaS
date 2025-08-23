@@ -135,10 +135,53 @@ After that, everything gets moved to the `~/training_data` folder.
 
 Now you are ready to train models.
 
-## Training Models
-TODO
+## Training Models - Neural Network
 
+For each function, we use [Optuna][0] to establish hyperparameters, then train and export the final model in the [ONNX][1] format. This can be done in a few steps:
+
+1. Copy the database (or databases) to train the models on to `./hyperFakeModel/neural-netowrk/training_dbs`.
+2. Run `just neural-clean` to prepare the `./hyperFakeModel/neural-network/models` folder. Its contents will get moved to a subfolder.
+3. Set up the venv by running `just neural-setup-venv`
+4. Optionally test the setup, e.g. by running `just neural-optuna-test echo`. This will perform a short Optuna optimization for the `echo` function and automatically cleans up after itself.
+5. Establish the hyperparameters for each function.
+   In seperate tmux windows, run the following commands.
+   - `just neural-optuna bfs-json`
+   - `just neural-optuna thumbnailer-json`
+   - `just neural-optuna echo`
+
+   This process will take many hours, depending on the hardware setup.
+6. Finally, train the models by running the following commands in seperate tmux windows:
+   - `just neural-train-model bfs-json`
+   - `just neural-train-model thumbnailer-json`
+   - `just neural-train-model echo`
+
+   This will result in a `$function.onnx` and `$function.onnx.data` file for each function.
+7. Copy the models to the target folder: `just neural-copy-models`
+
+### Training on a subset of the training data
+
+By default, step 6 will train on all the following columns of the training data:
+
+- "request_body_size"
+- "function_instances_count"
+- "active_function_calls_count"
+- "worker_cpu_usage"
+- "worker_ram_usage"
+
+In case you want to train on a subset of the columns, run
+
+`just neural-train-model-cols function "space-separated columns"`.
+
+For example, run
+
+`just neural-train-model-cols bfs-json "worker_cpu_usage worker_ram_usage"`
+
+to train the bfs-json function on just the two columns "worker_cpu_usage worker_ram_usage".
 ### [hyperFake Model](./hyperFakeModel/README.md)
+
+## Training Models - Random Forest
+
+TODO
 
 ## HyperFake Workers
 There is two implementations of the HyperFake worker, one in Python (./hyperFakeWorker/) and one in Go, which is a modification of the real worker.
@@ -161,3 +204,7 @@ If the runtime type is `fake-onnx`, the worker will load the onnx models using a
 ### Adding new models
 
 To add new models, you have to modify the main.go of the worker and include a new mapping of the image name to the model name, and make sure to add the model to the `./hyperFakeModel/` folder.
+
+
+[0]: https://optuna.org/
+[1]: https://onnx.ai/
