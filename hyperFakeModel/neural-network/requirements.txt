@@ -2,9 +2,11 @@ click
 matplotlib
 numpy
 onnx
+onnxscript
 optuna
 pandas
 requests
 scikit-learn
 torch
+torchvision
 tqdm

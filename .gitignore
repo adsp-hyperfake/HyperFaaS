@@ -333,6 +333,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+neural-net-venv/
 
 # Spyder project settings
 .spyderproject
@@ -402,9 +403,9 @@ $RECYCLE.BIN/
 *.lnk
 
 # End of https://www.toptal.com/developers/gitignore/api/go,windows,linux,macos,goland,python
-
 benchmarks/metrics.db
 hyperFakeModel/neural-network/**/*.json
 hyperFakeModel/neural-network/**/*.onnx
+hyperFakeModel/neural-network/**/*.onnx.data
 hyperFakeModel/neural-network/**/*.db
 benchmarks/*.csv
