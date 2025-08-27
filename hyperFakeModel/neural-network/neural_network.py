@@ -715,9 +715,12 @@ def run_optuna_study(
 
     onnx_export_path = os.path.join(export_dir, f"{identifier}.onnx")
     # Train the model with the best hyperparameters
-    val_score_final_training = setup_model_training(
-        cpu, identifier, onnx_export_path, X, y, final_epochs, output_cols, hyperparams
-    )
+    if final_epochs > 0:
+        val_score_final_training = setup_model_training(
+            cpu, identifier, onnx_export_path, X, y, final_epochs, output_cols, hyperparams
+        )
+    else:
+        val_score_final_training = "No final training."
 
     # Write the best hyperparameters to a file
     hyperparams_target = os.path.join(export_dir, f"{identifier}_hyperparams.json")

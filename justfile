@@ -64,7 +64,7 @@ restart:
 stop:
     @echo "Stopping docker service"
     WORKER_TYPE=worker docker compose down
-    
+
 d:
     @echo "Starting docker service"
     WORKER_TYPE=worker docker compose up --scale fake-worker=0 --build --detach
@@ -99,15 +99,107 @@ run-local-leaf:
     @echo "Running local leaf"
     go run cmd/leaf/main.go --address=localhost:50050 --log-level=debug --log-format=text --worker-ids=127.0.0.1:50051 --database-address=http://localhost:8999
 
-############################
-# Training Stuff
-############################
+################################
+# Training Stuff - Random Forest
+################################
 
 train-random-forest db_path="../benchmarks/metrics.db" table="training_data":
     cd hyperFakeModel/random-forest && \
         uv sync && \
         uv run random_forest.py --db-path {{db_path}} --table {{table}}
 
+
+#################################
+# Training Stuff - Neural Network
+#################################
+
+NEURAL_VENV_PATH := "./neural-net-venv"
+NEURAL_PYTHON := NEURAL_VENV_PATH + "/bin/python"
+NEURAL_PIP := NEURAL_VENV_PATH + "/bin/pip"
+NEURAL_PATH := "./hyperFakeModel/neural-network"
+NEURAL_CLI := NEURAL_PATH + "/neural_net_cli.py"
+
+# Set up the venv
+neural-setup-venv python_version="python3.12":
+    rm -rf {{NEURAL_VENV_PATH}}
+    {{python_version}} -m venv {{NEURAL_VENV_PATH}} --prompt "neural-net-venv"
+    {{NEURAL_PIP}} install --upgrade pip
+    {{NEURAL_PIP}} install -r {{NEURAL_PATH}}/requirements.txt
+
+# Run Optuna optimization to get hyperparameters
+neural-optuna function trials="150" epochs="50" jobs="-1" final-epochs="0" samples="-1" extra_args="":
+    {{NEURAL_PYTHON}} {{NEURAL_CLI}} optuna --func-tag hyperfaas-{{function}}:latest --short-name {{function}} \
+        --trials {{trials}} \
+        --epochs {{epochs}} \
+        --jobs {{jobs}} \
+        --final-epochs {{final-epochs}} \
+        --samples {{samples}} \
+        {{extra_args}}
+
+# Test the above optimization with a quick run, cleans up automatically
+neural-optuna-test function:
+    #!/bin/bash
+    echo "Creating temporary dir"
+    mkdir ./tmpoptunatest
+    just train-optuna {{function}} 5 5 2 5 100 "--export-dir ./tmpoptunatest --final-epochs=5"
+    printf "\n\n"
+    for f in ./tmpoptunatest/*; do
+        echo "File $f written"
+        if [[ $f == *.json ]]; then
+            echo "hyperparams.json:"
+            cat "$f"
+        fi
+    done
+    rm -rf ./tmpoptunatest
+    echo "\nTemporary dir removed"
+
+# Train the actual model
+neural-train-model function epochs="200" hyperparams_path="" extra_args="":
+    #!/bin/bash
+    # if no path is provided, look for the hyperparams in the default directory
+    if [ -z "{{hyperparams_path}}" ]; then
+        matches=(${NEURAL_PATH}/models/${function}_*_hyperparams.json)
+        if [ "${matches[0]}" = "./tmpoptunatest/{{function}}_*_hyperparams.json" ]; then
+            echo "No hyperparams file found for {{function}}"
+            exit 1
+        fi
+        if [ "${#matches[@]}" -gt 1 ]; then
+            echo "More than one hyperparams file found for {{function}}, please specify which one to use:"
+            for f in "${matches[@]}"; do
+                echo "  $f"
+            done
+            exit 1
+        fi
+        # Exactly one match
+        hyperparams_path="${matches[0]}"
+        echo "No hyperparams specified, continuing with hyperparams found at $hyperparams_path"
+    fi
+    {{NEURAL_PYTHON}} {{NEURAL_CLI}} manual --func-tag hyperfaas-{{function}}:latest --short-name {{function}} --epochs {{epochs}} --hyperparams $hyperparams_path {{extra_args}}
+
+# Train the model on the specified input columns (space-separated single argument) only
+neural-train-model-cols function cols epochs="200" hyperparams_path="" extra_args="":
+    #!/bin/bash
+    args=""
+    for w in $cols; do
+        args+="--input-cols $w "
+    done
+    args+={{extra_args}}
+    just neural-train-model {{function}} {{epochs}} "{{hyperparams_path}}" "$args"
+
+
+# Move all contents of the ./hyperFakeModel/neural-network/models folder to a subfolder
+neural-clean:
+    #!/bin/bash
+    timestamp=$(date +"%Y%m%d_%H%M%S")
+    origin="./hyperFakeModel/neural-network/models/"
+    target="./hyperFakeModel/neural-network/models/$timestamp"
+    # Create the subfolder inside 'your_folder'
+    mkdir -p $target
+    # Move all contents from 'your_folder' (except the new subfolder) to the timestamp subfolder
+    find $origin -mindepth 1 -maxdepth 1 -type f ! -name ".*" -exec mv {} $target \;
+
+neural-copy-models origin="./hyperFakeModel/neural-network/models/" target="./hyperFakeModel/":
+    find "{{origin}}" -mindepth 1 -maxdepth 1 -type f \( -name "*.onnx" -o -name "*.onnx.data" \) -exec cp {} "{{target}}" \; -exec echo "Copied: {}" \;
 
 ############################
 # Testing Stuff
