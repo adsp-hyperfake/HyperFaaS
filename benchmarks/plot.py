@@ -1,3 +1,4 @@
+from typing import Literal
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -5,6 +6,7 @@ import json
 import os
 from collections.abc import Mapping
 import time
+import numpy as np
 
 IMAGE_PALETTE = {
     "hyperfaas-bfs-json:latest": "blue",
@@ -563,3 +565,65 @@ class Plotter:
         plt.subplots_adjust(top=0.88)
         g.fig.suptitle("Latency over time – " + ", ".join(runs.keys()), fontsize=14)
         self._save_or_show("latency_time_comparison_multi")
+
+
+    @measure_time
+    def plot_rps_nmse_comparison_shifted(
+        self,
+        runs: Mapping[str, pd.DataFrame],
+        original_label: str,
+    ):
+        if original_label not in runs:
+            raise ValueError(f"Original label '{original_label}' not found in runs")
+        
+        # Prepare data & normalize time
+        df_all = self._prepare_multi_run_data(runs, apply_time_normalization=True)
+        
+        # Calculate RPS for each second
+        df_rps = (
+            df_all[df_all["grpc_req_duration"].notna()]
+            .assign(second=lambda d: d["timestamp"].dt.floor("s"))
+            .groupby(["worker_type", "second"])
+            .size()
+            .reset_index(name="rps")
+        )
+        
+        # Calculate NMSE
+        def _nmse(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+            if y_true.size == 0:
+                return np.nan
+            
+            mse = np.mean((y_true - y_pred) ** 2)
+            var_true = np.var(y_true)
+            
+            if var_true == 0:
+                return 0.0 if np.allclose(y_true, y_pred) else float("inf")
+            return mse / var_true
+        
+        nmse_map = {original_label: 1.0}
+        
+        orig_series = df_rps[df_rps["worker_type"] == original_label][["second", "rps"]]
+        for label in df_rps["worker_type"].unique():
+            if label == original_label:
+                continue
+            
+            cand_series = df_rps[df_rps["worker_type"] == original_label][["second", "rps"]]
+
+            merged = pd.merge(orig_series, cand_series, on="second", how="inner", suffixes=("_orig", "_cand"))
+            nmse_map[label] = _nmse(merged["rps_orig"].to_numpy(), merged["rps_cand"].to_numpy())
+        
+        # Plot
+        others_sorted = sorted([(k, v) for k, v in nmse_map.items() if k != original_label], key=lambda kv: np.nan_to_num(kv[1], nan=np.inf))
+        ordered = [original_label] + [k for k, _ in others_sorted]
+        values = [1.0] + [v for _, v in others_sorted]
+
+        plot_df = pd.DataFrame({"Run": ordered, "NMSE": values})
+
+        plt.figure(figsize=(10, 6))
+        ax = sns.barplot(data=plot_df, y="Run", x="NMSE", order=ordered)
+        ax.axvline(1.0, color="gray", linestyle="--", linewidth=1)
+        ax.set_title(f"RPS-NMSE – Reference: '{original_label}' (Time normalized)")
+        ax.set_xlabel("NMSE (MSE / Var(Original))")
+        ax.set_ylabel("Run")
+        plt.tight_layout()
+        self._save_or_show("rps_nmse_comparison_shifted")

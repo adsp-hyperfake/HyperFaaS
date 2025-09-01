@@ -141,6 +141,7 @@ def main():
             plotter.plot_latency_distribution(runs)
             plotter.plot_latency_distribution_per_image(runs)
             plotter.plot_latency_time_comparison(runs)
+            plotter.plot_rps_nmse_comparison_shifted(runs, original_label=metrics_list[0]['worker_type'].iat[0])
             runs_cpu = {df["worker_type"].iat[0]: df for df in cpu_metrics_list}
             plotter.plot_cpu_usage_total(runs_cpu)
             plotter.plot_memory_usage_total(runs_cpu)
