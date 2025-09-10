@@ -15,7 +15,7 @@ from tqdm_joblib import tqdm_joblib
 
 # Feature and target column definitions
 INPUT_COLS = [
-    "request_body_size",
+    "request_size_bytes",
     "function_instances_count",
     "active_function_calls_count",
     "worker_cpu_usage",
@@ -23,7 +23,7 @@ INPUT_COLS = [
 ]
 
 OUTPUT_COLS = [
-    "function_runtime",
+    "function_processing_time_ns",
     "function_cpu_usage",
     "function_ram_usage",
 ]
@@ -32,7 +32,7 @@ OUTPUT_COLS = [
 def load_data_from_db(db_path, table_name, func_tag):
     """Load feature and target arrays from the SQLite training_data table for a given function tag."""
     conn = sqlite3.connect(db_path)
-    query = f"SELECT {', '.join(INPUT_COLS + OUTPUT_COLS)} FROM {table_name} WHERE function_image_tag = ?"
+    query = f"SELECT {', '.join(INPUT_COLS + OUTPUT_COLS)} FROM {table_name} WHERE image_tag = ?"
     df = pd.read_sql_query(query, conn, params=(func_tag,))
     conn.close()
 
@@ -145,5 +145,5 @@ if __name__ == "__main__":
     table_name = args.table
 
     for func_tag, short_name in zip(func_tags, short_names):
-        target_path = os.path.join(curr_dir, f"{short_name}.onnx")
+        target_path = os.path.join(curr_dir + "/models", f"{short_name}.onnx")
         main(table_name, func_tag, target_path, db_path=db_path) 
