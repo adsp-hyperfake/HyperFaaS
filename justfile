@@ -108,6 +108,11 @@ train-random-forest db_path="../../benchmarks/metrics.db" table="training_data":
         uv sync && \
         uv run random_forest.py --db-path {{db_path}} --table {{table}}
 
+train-ridge-regression db_path="../../benchmarks/metrics.db" table="training_data":
+    cd hyperFakeModel/ridge-regression && \
+        uv sync && \
+        uv run ridge_regression.py --db-path {{db_path}} --table {{table}}
+
 
 #################################
 # Training Stuff - Neural Network
