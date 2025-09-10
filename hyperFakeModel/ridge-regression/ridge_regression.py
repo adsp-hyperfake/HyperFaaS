@@ -58,28 +58,43 @@ def train_ridge_model(X_train, y_train, X_val, y_val):
     # Create alpha range - focus on what matters
     alphas = np.logspace(-3, 3, 25)  # 25 alphas from 0.001 to 1000
     
-    # Create pipeline with scaling and RidgeCV
-    print("Training Ridge model with cross-validation...")
-    model = make_pipeline(
+    # Create pipeline with scaling and RidgeCV for hyperparameter selection
+    print("Selecting optimal alpha with cross-validation...")
+    model_cv = make_pipeline(
         StandardScaler(with_mean=True, with_std=True),
         RidgeCV(alphas=alphas, cv=5)
     )
     
-    # Train on the training set
-    model.fit(X_train, y_train)
+    # Train on the training set to select best alpha
+    model_cv.fit(X_train, y_train)
     
     # Get the best alpha
-    best_alpha = model.named_steps['ridgecv'].alpha_
+    best_alpha = model_cv.named_steps['ridgecv'].alpha_
     print(f"Best alpha: {best_alpha:.6f}")
     
-    # Make predictions on validation set
-    y_val_pred = model.predict(X_val)
+    # Make predictions on validation set (for reporting)
+    y_val_pred = model_cv.predict(X_val)
     
-    return model, y_val_pred
+    # Now refit on combined train+val data with the selected alpha
+    print("Refitting on combined train+validation data...")
+    X_combined = np.vstack([X_train, X_val])
+    y_combined = np.vstack([y_train, y_val])
+    
+    # Create final model with the selected alpha
+    from sklearn.linear_model import Ridge
+    final_model = make_pipeline(
+        StandardScaler(with_mean=True, with_std=True),
+        Ridge(alpha=best_alpha)
+    )
+    
+    # Fit on all available non-test data
+    final_model.fit(X_combined, y_combined)
+    
+    return final_model, y_val_pred
 
 
 def evaluate_model(y_true, y_pred):
-    """Evaluate model performance."""
+    """Evaluate model performance with overall metrics only (for backward compatibility)."""
     mse = mean_squared_error(y_true, y_pred)
     rmse = np.sqrt(mse)
     mae = mean_absolute_error(y_true, y_pred)
@@ -93,15 +108,30 @@ def evaluate_model(y_true, y_pred):
     }
 
 
-def export_model_to_onnx(model, input_dim, target_path):
-    """Export the trained Ridge model pipeline to ONNX format."""
-    # Define the input type
+def evaluate_multi(y_true, y_pred, col_names):
+    """Evaluate multi-output model with both overall and per-column metrics."""
+    overall = {
+        "MSE": mean_squared_error(y_true, y_pred),
+        "RMSE": np.sqrt(mean_squared_error(y_true, y_pred)),
+        "MAE": mean_absolute_error(y_true, y_pred),
+        "R2_uniform": r2_score(y_true, y_pred, multioutput="uniform_average"),
+        "R2_var_weighted": r2_score(y_true, y_pred, multioutput="variance_weighted"),
+    }
+    per_col = {}
+    for i, c in enumerate(col_names):
+        per_col[c] = {
+            "MSE": mean_squared_error(y_true[:, i], y_pred[:, i]),
+            "RMSE": np.sqrt(mean_squared_error(y_true[:, i], y_pred[:, i])),
+            "MAE": mean_absolute_error(y_true[:, i], y_pred[:, i]),
+            "R2": r2_score(y_true[:, i], y_pred[:, i]),
+        }
+    return overall, per_col
+
+
+def export_pipeline_to_onnx(pipeline, input_dim, target_path):
+    """Export the fitted pipeline directly to ONNX format."""
     initial_type = [('float_input', FloatTensorType([None, input_dim]))]
-    
-    # Convert to ONNX (model is already a pipeline with scaler + RidgeCV)
-    onnx_model = convert_sklearn(model, initial_types=initial_type)
-    
-    # Save the model
+    onnx_model = convert_sklearn(pipeline, initial_types=initial_type)
     onnx.save_model(onnx_model, target_path)
     print(f"Exported model to '{target_path}'")
 
@@ -117,22 +147,35 @@ def main(table_name, func_tag, target_path, db_path):
     # Train model
     model, y_val_pred = train_ridge_model(X_train, y_train, X_val, y_val)
     
-    # Evaluate on validation set
-    metrics_val = evaluate_model(y_val, y_val_pred)
+    # Evaluate on validation set with detailed metrics
+    overall_val, per_col_val = evaluate_multi(y_val, y_val_pred, OUTPUT_COLS)
     
-    # Evaluate on test set
+    # Evaluate on test set with detailed metrics
     y_test_pred = model.predict(X_test)
-    metrics_test = evaluate_model(y_test, y_test_pred)
+    overall_test, per_col_test = evaluate_multi(y_test, y_test_pred, OUTPUT_COLS)
     
     # Print results
-    print("=" * 40)
-    print(f"Validation results for {func_tag}: {metrics_val}")
-    print(f"Test results for {func_tag}: {metrics_test}")
-    print("=" * 40)
+    print("=" * 60)
+    print(f"Results for {func_tag}")
+    print("=" * 60)
+    
+    print("\nVALIDATION METRICS:")
+    print("Overall:", overall_val)
+    print("Per-column:")
+    for col, metrics in per_col_val.items():
+        print(f"  {col}: {metrics}")
+    
+    print("\nTEST METRICS:")
+    print("Overall:", overall_test)
+    print("Per-column:")
+    for col, metrics in per_col_test.items():
+        print(f"  {col}: {metrics}")
+    
+    print("=" * 60)
 
     # Export to ONNX
     input_dim = X.shape[1]
-    export_model_to_onnx(model, input_dim, target_path)
+    export_pipeline_to_onnx(model, input_dim, target_path)
 
 
 def get_function_tags_from_db(db_path, table_name):
