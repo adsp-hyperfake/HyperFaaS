@@ -103,7 +103,7 @@ run-local-leaf:
 # Training Stuff - Random Forest
 ################################
 
-train-random-forest db_path="../benchmarks/metrics.db" table="training_data":
+train-random-forest db_path="../../benchmarks/metrics.db" table="training_data":
     cd hyperFakeModel/random-forest && \
         uv sync && \
         uv run random_forest.py --db-path {{db_path}} --table {{table}}
@@ -281,6 +281,18 @@ run-full-pipeline config_file="benchmarks/configs/10m.yaml" out_file="results.cs
     mkdir -p ~/training_data/${timestamp}/plots
     mv ./benchmarks/plots/* ~/training_data/${timestamp}/plots/
 
+# Local version of the pipeline that doesn't require remote connections
+run-local-pipeline config_file="benchmarks/configs/local.yaml" out_file="results.csv":
+    mkdir -p benchmarks/plots
+    go run cmd/load-generator/main.go --config {{config_file}} --out benchmarks/{{out_file}}
+    ./pull-metrics-local.sh
+
+    cd benchmarks && uv run new_import.py --csv {{out_file}} --db metrics.db
+    cd benchmarks && uv run process.py --db-path metrics.db
+    cd benchmarks && uv run main.py --plot --db-path metrics.db --plot-save-path ./plots/ --prefix local
+
+    timestamp=$(date +%Y-%m-%d_%H-%M-%S)
+    
 allow-reuse-connections:
     # Allow reusing TIME_WAIT sockets for new connections when safe
     sudo sysctl -w net.ipv4.tcp_tw_reuse=1
