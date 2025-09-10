@@ -127,23 +127,36 @@ def main(table_name, func_tag, target_path, db_path):
     export_model_to_onnx(model, input_dim, target_path)
 
 
+def get_function_tags_from_db(db_path, table_name):
+    """Get all unique function tags from the database."""
+    conn = sqlite3.connect(db_path)
+    query = f"SELECT DISTINCT image_tag FROM {table_name}"
+    cursor = conn.execute(query)
+    func_tags = [row[0] for row in cursor.fetchall()]
+    conn.close()
+    return func_tags
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train RandomForest models and export them to ONNX.")
     parser.add_argument("--db-path", help="Path to the SQLite metrics database.")
     parser.add_argument("--table", default="training_data", help="Name of the table with training data.")
     args = parser.parse_args()
 
-    func_tags = [
-        "hyperfaas-bfs-json:latest",
-        "hyperfaas-thumbnailer-json:latest",
-        "hyperfaas-echo:latest",
-    ]
-    short_names = ["bfs", "thumbnailer", "echo"]
     curr_dir = os.path.dirname(os.path.abspath(__file__))
     default_db_path = os.path.join(curr_dir, "..", "..", "benchmarks", "metrics.db")
     db_path = os.path.abspath(args.db_path) if args.db_path else default_db_path
     table_name = args.table
 
-    for func_tag, short_name in zip(func_tags, short_names):
-        target_path = os.path.join(curr_dir + "/models", f"{short_name}.onnx")
+    # Get all function tags from the database
+    func_tags = get_function_tags_from_db(db_path, table_name)
+    print(f"Found {len(func_tags)} function tags in database: {func_tags}")
+
+    # Create models directory if it doesn't exist
+    models_dir = os.path.join(curr_dir, "models")
+    os.makedirs(models_dir, exist_ok=True)
+
+    for func_tag in func_tags:
+        func_name = func_tag.split(":")[0]
+        target_path = os.path.join(models_dir, f"{func_name}.onnx")
         main(table_name, func_tag, target_path, db_path=db_path) 
