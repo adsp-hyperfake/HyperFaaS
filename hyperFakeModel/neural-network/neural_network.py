@@ -194,7 +194,7 @@ def plot_loss_curves(train_losses, val_losses):
 def load_data_from_dbs(dbs_dir, table_name, input_cols, output_cols):
     """Load data from all SQLite databases in a directory returns a merged dataframe."""
     all_dfs = []
-    query = f"SELECT {', '.join(input_cols + output_cols + ['function_image_tag'])} FROM {table_name}"
+    query = f"SELECT {', '.join(input_cols + output_cols + ['image_tag'])} FROM {table_name}"
     for filename in os.listdir(dbs_dir):
         if filename.endswith(".db") or filename.endswith(".sqlite"):
             db_path = os.path.join(dbs_dir, filename)
@@ -233,7 +233,7 @@ def load_data_from_dbs(dbs_dir, table_name, input_cols, output_cols):
 
 def get_targets_and_features_from_tag(df, image_tag, samples, input_cols, output_cols):
     """Takes a dataframe and returns only the rows for the relevant image tag."""
-    image_tag_data_only = df[df["function_image_tag"] == image_tag]
+    image_tag_data_only = df[df["image_tag"] == image_tag]
     if samples > 0:
         image_tag_data_only = image_tag_data_only.sample(n=samples, random_state=42)
     X = image_tag_data_only[input_cols].values

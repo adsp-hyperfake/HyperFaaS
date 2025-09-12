@@ -66,7 +66,7 @@ def shared_training_options(func):
         multiple=True,
         show_default=True,
         default=(
-            "request_body_size",
+            "request_size_bytes",
             "function_instances_count",
             "active_function_calls_count",
             "worker_cpu_usage",
@@ -79,7 +79,7 @@ def shared_training_options(func):
         multiple=True,
         show_default=True,
         default=(
-            "function_runtime",
+            "function_processing_time_ns",
             "function_cpu_usage",
             "function_ram_usage",
         ),

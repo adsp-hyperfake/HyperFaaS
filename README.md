@@ -139,7 +139,7 @@ Now you are ready to train models.
 
 For each function, we use [Optuna][0] to establish hyperparameters, then train and export the final model in the [ONNX][1] format. This can be done in a few steps:
 
-1. Copy the database (or databases) to train the models on to `./hyperFakeModel/neural-netowrk/training_dbs`.
+1. Copy the database (or databases) to train the models on to `./hyperFakeModel/training_dbs`.
 2. Run `just neural-clean` to prepare the `./hyperFakeModel/neural-network/models` folder. Its contents will get moved to a subfolder.
 3. Set up the venv by running `just neural-setup-venv`
 4. Optionally test the setup, e.g. by running `just neural-optuna-test echo`. This will perform a short Optuna optimization for the `echo` function and automatically cleans up after itself.

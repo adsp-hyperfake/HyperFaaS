@@ -146,7 +146,7 @@ neural-optuna-test function:
     #!/bin/bash
     echo "Creating temporary dir"
     mkdir ./tmpoptunatest
-    just train-optuna {{function}} 5 5 2 5 100 "--export-dir ./tmpoptunatest --final-epochs=5"
+    just neural-optuna {{function}} 5 5 2 5 100 "--export-dir ./tmpoptunatest"
     printf "\n\n"
     for f in ./tmpoptunatest/*; do
         echo "File $f written"
