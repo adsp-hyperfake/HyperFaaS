@@ -1,0 +1,20 @@
+{
+    "hyperparams": {
+        "hidden_dims": [
+            36,
+            39
+        ],
+        "dropouts": [
+            0.11206715209248676,
+            0.08105408264509174
+        ],
+        "lr": 0.003702774104410271,
+        "weight_decay": 2.4723290685204894e-05,
+        "batch_size": 64,
+        "patience": 20,
+        "optimizer": "Adam",
+        "gradient_clipping": true
+    },
+    "val_score_optuna": 0.4386258066052527,
+    "val_score_final_training": "No final training."
+}

@@ -51,7 +51,7 @@ def shared_training_options(func):
     )
     @click.option(
         "--table-name",
-        default="training_data",
+        default="training_data_avg",
         show_default=True,
         help="The db's table name containing the training data",
     )
