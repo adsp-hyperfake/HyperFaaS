@@ -100,16 +100,32 @@ def export_model_to_onnx(model, input_dim, target_path):
     print(f"Exported model to '{target_path}'")
 
 
-def main(table_name, func_tag, target_path, db_path):
+def main(table_name, func_tag, target_path, db_path, model_params=None):
     """Main pipeline for training and exporting a random forest model."""
     X, y = load_data_from_db(db_path, table_name, func_tag)
 
     # Split into train/validation/test
     X_train, X_val, X_test, y_train, y_val, y_test = get_splits(X, y, seed=42)
 
-    # Train model
+    # Train model with configurable parameters
+    if model_params is None:
+        model_params = {}
+    
+    # Set default parameters if not provided
+    rf_params = {
+        'n_estimators': model_params.get('n_estimators', 100),
+        'max_depth': model_params.get('max_depth', None),
+        'min_samples_split': model_params.get('min_samples_split', 2),
+        'min_samples_leaf': model_params.get('min_samples_leaf', 1),
+        'max_features': model_params.get('max_features', 'sqrt'),
+        'random_state': model_params.get('random_state', 42),
+        'n_jobs': model_params.get('n_jobs', -1)
+    }
+    
     input_dim = X_train.shape[1]
-    model = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)
+    model = RandomForestRegressor(**rf_params)
+    print(f"Training Random Forest with parameters: {rf_params}")
+    
     with tqdm_joblib(tqdm(total=model.n_estimators, desc="Training RF")):
         model.fit(X_train, y_train)
 
@@ -141,6 +157,16 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train RandomForest models and export them to ONNX.")
     parser.add_argument("--db-path", help="Path to the SQLite metrics database.")
     parser.add_argument("--table", default="training_data", help="Name of the table with training data.")
+    
+    # Random Forest model parameters
+    parser.add_argument("--n-estimators", type=int, default=100, help="Number of trees in the forest (default: 100)")
+    parser.add_argument("--max-depth", type=int, default=None, help="Maximum depth of trees (default: None)")
+    parser.add_argument("--min-samples-split", type=int, default=2, help="Minimum samples required to split an internal node (default: 2)")
+    parser.add_argument("--min-samples-leaf", type=int, default=1, help="Minimum samples required to be at a leaf node (default: 1)")
+    parser.add_argument("--max-features", type=str, default="sqrt", help="Number of features to consider when looking for the best split (default: sqrt)")
+    parser.add_argument("--random-state", type=int, default=42, help="Random state for reproducibility (default: 42)")
+    parser.add_argument("--n-jobs", type=int, default=-1, help="Number of jobs to run in parallel (default: -1)")
+    
     args = parser.parse_args()
 
     curr_dir = os.path.dirname(os.path.abspath(__file__))
@@ -148,9 +174,21 @@ if __name__ == "__main__":
     db_path = os.path.abspath(args.db_path) if args.db_path else default_db_path
     table_name = args.table
 
+    # Collect model parameters from args
+    model_params = {
+        'n_estimators': args.n_estimators,
+        'max_depth': args.max_depth,
+        'min_samples_split': args.min_samples_split,
+        'min_samples_leaf': args.min_samples_leaf,
+        'max_features': args.max_features,
+        'random_state': args.random_state,
+        'n_jobs': args.n_jobs
+    }
+
     # Get all function tags from the database
     func_tags = get_function_tags_from_db(db_path, table_name)
     print(f"Found {len(func_tags)} function tags in database: {func_tags}")
+    print(f"Using model parameters: {model_params}")
 
     # Create models directory if it doesn't exist
     models_dir = os.path.join(curr_dir, "models")
@@ -159,4 +197,4 @@ if __name__ == "__main__":
     for func_tag in func_tags:
         func_name = func_tag.split(":")[0]
         target_path = os.path.join(models_dir, f"{func_name}.onnx")
-        main(table_name, func_tag, target_path, db_path=db_path) 
+        main(table_name, func_tag, target_path, db_path=db_path, model_params=model_params) 

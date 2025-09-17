@@ -103,15 +103,26 @@ run-local-leaf:
 # Training Stuff - Random Forest
 ################################
 
-train-random-forest db_path="../../benchmarks/metrics.db" table="training_data":
-    cd hyperFakeModel/random-forest && \
-        uv sync && \
-        uv run random_forest.py --db-path {{db_path}} --table {{table}}
+train-random-forest db_path="../../benchmarks/metrics.db" table="training_data" n_estimators="100" max_depth="" min_samples_split="2" min_samples_leaf="1" max_features="sqrt" random_state="42" n_jobs="-1":
+    #!/bin/bash
+    cd hyperFakeModel/random-forest
+    uv sync
+    
+    # Build the command with conditional parameters
+    cmd="uv run random_forest.py --db-path {{db_path}} --table {{table}} --n-estimators {{n_estimators}} --min-samples-split {{min_samples_split}} --min-samples-leaf {{min_samples_leaf}} --max-features {{max_features}} --random-state {{random_state}} --n-jobs {{n_jobs}}"
+    
+    # Add max-depth only if specified (since None is the default)
+    if [ "{{max_depth}}" != "" ]; then
+        cmd="$cmd --max-depth {{max_depth}}"
+    fi
+    
+    echo "Running: $cmd"
+    eval $cmd
 
-train-ridge-regression db_path="../../benchmarks/metrics.db" table="training_data":
+train-ridge-regression db_path="../../benchmarks/metrics.db" table="training_data" alpha_min="-3" alpha_max="3" alpha_num="25" cv_folds="5" test_size="0.2" val_size="0.25" random_state="42":
     cd hyperFakeModel/ridge-regression && \
         uv sync && \
-        uv run ridge_regression.py --db-path {{db_path}} --table {{table}}
+        uv run ridge_regression.py --db-path {{db_path}} --table {{table}} --alpha-min {{alpha_min}} --alpha-max {{alpha_max}} --alpha-num {{alpha_num}} --cv-folds {{cv_folds}} --test-size {{test_size}} --val-size {{val_size}} --random-state {{random_state}}
 
 
 #################################
