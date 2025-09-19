@@ -119,8 +119,18 @@ def test_call(ctx):
     logger = logging.getLogger()
     config: WorkerConfig = ctx.obj
 
-    # Register the function in the key-value store first
-    function_id_str = "hyperfaas-echo:latest"
+    # Register the function in the key-value store first  
+    # Use the first available model for testing
+    models_dir = Path("models")
+    available_models = list(models_dir.glob("*.onnx"))
+    if not available_models:
+        logger.error("No ONNX models found for testing")
+        return
+    
+    # Use the first model found (e.g. hyperfaas-echo.onnx -> hyperfaas-echo:latest)
+    model_file = available_models[0]
+    function_name = model_file.stem  # e.g. hyperfaas-echo
+    function_id_str = f"{function_name}:latest"
     kv_url = config.db_address
     if not kv_url.startswith("http://"):
         kv_url = f"http://{kv_url}"

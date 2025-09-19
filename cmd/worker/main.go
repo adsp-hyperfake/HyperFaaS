@@ -2,9 +2,11 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 
 	kv "github.com/3s-rg-codes/HyperFaaS/pkg/keyValueStore"
@@ -193,11 +195,13 @@ func main() {
 		// Uses the onnx runtime. Please make sure to set --onnxruntime-path to the correct path.
 		// The model file names are hard coded for simplicity and assumed to be the ones below.
 	case "fake-onnx":
-		models, err := fakeRuntime.LoadOnnxModels(wc.Runtime.FakeModelsPath, map[string]string{
-			"hyperfaas-echo:latest":             "echo.onnx",
-			"hyperfaas-bfs-json:latest":         "bfs-json.onnx",
-			"hyperfaas-thumbnailer-json:latest": "thumbnailer-json.onnx",
-		}, wc.Runtime.OnnxRuntimePath)
+		// Discover models dynamically based on files in the models directory
+		modelMapping, err := discoverOnnxModels(wc.Runtime.FakeModelsPath)
+		if err != nil {
+			logger.Error("Failed to discover ONNX models", "error", err)
+			os.Exit(1)
+		}
+		models, err := fakeRuntime.LoadOnnxModels(wc.Runtime.FakeModelsPath, modelMapping, wc.Runtime.OnnxRuntimePath)
 		if err != nil {
 			logger.Error("Failed to load models", "error", err)
 			os.Exit(1)
@@ -214,4 +218,42 @@ func main() {
 	c := controller.NewController(runtime, statsManager, callRouter, logger, wc.General.Address, dbClient)
 
 	c.StartServer()
+}
+
+// discoverOnnxModels automatically discovers ONNX model files in a directory and maps them to image tags
+// Uses naming convention: hyperfaas-{function-name}.onnx -> hyperfaas-{function-name}:latest
+func discoverOnnxModels(modelsDir string) (map[string]string, error) {
+	modelMapping := make(map[string]string)
+	
+	// Check if models directory exists
+	if _, err := os.Stat(modelsDir); os.IsNotExist(err) {
+		return nil, fmt.Errorf("models directory does not exist: %s", modelsDir)
+	}
+	
+	// Read only the root directory (not recursive) to avoid test files in subdirectories
+	entries, err := os.ReadDir(modelsDir)
+	if err != nil {
+		return nil, fmt.Errorf("error reading models directory: %w", err)
+	}
+	
+	for _, entry := range entries {
+		// Skip directories and non-.onnx files
+		if entry.IsDir() || !strings.HasSuffix(strings.ToLower(entry.Name()), ".onnx") {
+			continue
+		}
+		
+		// Extract function name from filename (remove .onnx extension)
+		baseName := strings.TrimSuffix(entry.Name(), ".onnx")
+		
+		imageTag := baseName + ":latest"
+		
+		// Map image tag to filename
+		modelMapping[imageTag] = entry.Name()
+	}
+	
+	if len(modelMapping) == 0 {
+		return nil, fmt.Errorf("no ONNX model files found in directory: %s", modelsDir)
+	}
+	
+	return modelMapping, nil
 }
