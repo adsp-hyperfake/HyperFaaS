@@ -3,8 +3,72 @@
 import click
 import json
 import os
+import sqlite3
+import glob
 from functools import wraps
 from neural_network import optuna_pipeline, manual_pipeline
+
+
+def discover_function_tags_from_db(dbs_dir, table_name):
+    """Discover all unique function tags from training databases."""
+    func_tags = set()
+    
+    # Find all .db files in the directory
+    db_files = glob.glob(os.path.join(dbs_dir, "*.db"))
+    
+    if not db_files:
+        raise click.ClickException(f"No database files found in {dbs_dir}")
+    
+    for db_file in db_files:
+        try:
+            conn = sqlite3.connect(db_file)
+            cursor = conn.execute(f"SELECT DISTINCT image_tag FROM {table_name}")
+            tags = [row[0] for row in cursor.fetchall()]
+            func_tags.update(tags)
+            conn.close()
+        except sqlite3.Error as e:
+            click.echo(f"Warning: Could not read {db_file}: {e}", err=True)
+            continue
+    
+    if not func_tags:
+        raise click.ClickException(f"No function tags found in table '{table_name}' across databases in {dbs_dir}")
+    
+    return sorted(list(func_tags))
+
+
+def generate_short_names(func_tags):
+    """Generate short names from function tags."""
+    short_names = []
+    for tag in func_tags:
+        # Extract function name from tag (remove hyperfaas- prefix and :latest suffix)
+        # Example: hyperfaas-bfs-json:latest -> bfs-json
+        if tag.startswith("hyperfaas-") and tag.endswith(":latest"):
+            short_name = tag[len("hyperfaas-"):-len(":latest")]
+        else:
+            # Fallback: use the part before the first colon
+            short_name = tag.split(":")[0]
+        short_names.append(short_name)
+    return short_names
+
+
+def resolve_function_config(func_tag, short_name, dbs_dir, table_name):
+    """Resolve function tags and short names, discovering them if needed."""
+    if func_tag is None:
+        click.echo("No function tags specified, discovering from database...")
+        func_tag = discover_function_tags_from_db(dbs_dir, table_name)
+        click.echo(f"Discovered function tags: {func_tag}")
+    
+    if short_name is None:
+        click.echo("No short names specified, auto-generating...")
+        short_name = generate_short_names(func_tag)
+        click.echo(f"Generated short names: {short_name}")
+    
+    if len(func_tag) != len(short_name):
+        raise click.ClickException(
+            f"Number of function tags ({len(func_tag)}) must match number of short names ({len(short_name)})"
+        )
+    
+    return func_tag, short_name
 
 
 def shared_training_options(func):
@@ -34,20 +98,14 @@ def shared_training_options(func):
     @click.option(
         "--func-tag",
         multiple=True,
-        default=(
-            "hyperfaas-bfs-json:latest",
-            "hyperfaas-thumbnailer-json:latest",
-            "hyperfaas-echo:latest",
-        ),
-        show_default=True,
-        help="Function tags to train (can be specified multiple times)",
+        default=None,
+        help="Function tags to train (can be specified multiple times). If not provided, will discover all functions from database.",
     )
     @click.option(
         "--short-name",
         multiple=True,
-        default=("bfs-json", "thumbnailer-json", "echo"),
-        show_default=True,
-        help="Short names corresponding to function tags",
+        default=None,
+        help="Short names corresponding to function tags. If not provided, will auto-generate from function tags.",
     )
     @click.option(
         "--table-name",
@@ -168,10 +226,9 @@ def optuna(
     input_cols,
     output_cols,
 ):
-    if len(func_tag) != len(short_name):
-        raise click.ClickException(
-            "Number of function tags must match number of short names"
-        )
+    # Resolve function tags and short names
+    func_tag, short_name = resolve_function_config(func_tag, short_name, dbs_dir, table_name)
+    
     assert jobs != 0, "Number of parallel jobs must not be 0"
     click.echo(f"Trials: {trials}, Jobs: {jobs}")
     optuna_pipeline(
