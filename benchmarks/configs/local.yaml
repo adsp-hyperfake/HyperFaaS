@@ -19,6 +19,17 @@ function_config:
     cpu:
       period: 100000
       quota: 100000
+data_providers:
+  hyperfaas-echo:latest:
+    type: "echo"
+    min_body_size: 256
+    max_body_size: 1024
+  hyperfaas-bfs-json:latest:
+    type: "bfs_json"
+    min_nodes: 100
+    max_nodes: 250
+  hyperfaas-thumbnailer-json:latest:
+    type: "thumbnailer_json"
 patterns:
   echo:
     image_tag: hyperfaas-echo:latest
