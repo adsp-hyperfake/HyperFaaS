@@ -171,6 +171,9 @@ def export_model_to_onnx(cpu, model, path):
         input_names=["input"],
         output_names=["output"],
         do_constant_folding=True,  # Optimize the model
+        export_params=True,
+        use_external_data_format=False,
+        opset_version=19,
     )
     print(f"Exported model to {path}.")
 
