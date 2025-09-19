@@ -301,7 +301,6 @@ run-full-pipeline config_file="benchmarks/configs/10m.yaml" out_file="results.cs
 run-local-pipeline config_file="benchmarks/configs/local.yaml" out_file="results.csv":
     mkdir -p benchmarks/plots
     go run cmd/load-generator/main.go --config {{config_file}} --out benchmarks/{{out_file}}
-    ./pull-metrics-local.sh
 
     cd benchmarks && uv run new_import.py --csv {{out_file}} --db metrics.db
     cd benchmarks && uv run process.py --db-path metrics.db
