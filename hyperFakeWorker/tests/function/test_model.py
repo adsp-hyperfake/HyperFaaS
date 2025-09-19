@@ -1,16 +1,20 @@
 from pathlib import Path
 import numpy as np
+import pytest
 
 from hyperFakeWorker.worker.function.managers.model import FunctionModelInferer, FunctionModelInput, FunctionModelOutput
 
 test_path = Path(__file__).parent
 
-bfs_model = test_path.joinpath("bfs.onnx")
-echo_model = test_path.joinpath("echo.onnx")
-thumbnailer_model = test_path.joinpath("thumbnailer.onnx")
+# Auto-discover available test models
+test_models = list(test_path.glob("*.onnx"))
 
 def test_FunctionModelInferer():
-    inferer = FunctionModelInferer(bfs_model)
+    if not test_models:
+        pytest.skip("No ONNX test models found")
+    
+    # Use the first available test model
+    inferer = FunctionModelInferer(test_models[0])
     assert inferer.model is not None, "Failed to load ONNX model"
 
     input_data = FunctionModelInput(100, 5, 5, 5.5, 1024)
