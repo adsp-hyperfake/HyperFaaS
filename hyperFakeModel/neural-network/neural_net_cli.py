@@ -286,10 +286,8 @@ def manual(
     input_cols,
     output_cols,
 ):
-    if len(func_tag) != len(short_name):
-        raise click.ClickException(
-            "Number of function tags must match number of short names"
-        )
+    # Resolve function tags and short names
+    func_tag, short_name = resolve_function_config(func_tag, short_name, dbs_dir, table_name)
     click.echo("Starting manual mode...")
     click.echo(f"Database path: {dbs_dir}")
     click.echo(f"Target path: {export_dir}")
