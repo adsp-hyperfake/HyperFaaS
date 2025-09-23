@@ -79,7 +79,7 @@ def export_model_to_onnx(model, input_dim, target_path):
 
     initial_types = [("input", FloatTensorType([None, input_dim]))]
 
-    final_types = [("variable", FloatTensorType([None, len(OUTPUT_COLS)]))]
+    final_types = [("output", FloatTensorType([None, len(OUTPUT_COLS)]))]
 
     onnx_model = convert_sklearn(
         model,

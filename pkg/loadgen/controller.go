@@ -21,15 +21,17 @@ type Controller struct {
 }
 
 type Config struct {
-	GenerateWorkload bool                       `yaml:"generate_workload"`
-	LeafAddress      string                     `yaml:"leaf_address"`
-	Seed             int64                      `yaml:"seed,omitempty"`
-	MaxDuration      time.Duration              `yaml:"max_duration"`
-	Timeout          int32                      `yaml:"timeout"`
-	Patterns         map[string]*PhasePattern   `yaml:"patterns"`
-	Workload         *Workload                  `yaml:"workload,omitempty"`
-	FunctionConfig   map[string]*FunctionConfig `yaml:"function_config"`
+	GenerateWorkload   bool                          `yaml:"generate_workload"`
+	LeafAddress        string                        `yaml:"leaf_address"`
+	Seed               int64                         `yaml:"seed,omitempty"`
+	MaxDuration        time.Duration                 `yaml:"max_duration"`
+	Timeout            int32                         `yaml:"timeout"`
+	Patterns           map[string]*PhasePattern      `yaml:"patterns"`
+	Workload           *Workload                     `yaml:"workload,omitempty"`
+	FunctionConfig     map[string]*FunctionConfig    `yaml:"function_config"`
+	DataProviders      map[string]*DataProviderConfig `yaml:"data_providers,omitempty"`
 }
+
 
 type Workload struct {
 	LeafAddress string        `yaml:"leaf_address"`
@@ -133,14 +135,18 @@ func NewController(logger *slog.Logger, opts ...Option) *Controller {
 	distinctImageTags := getDistinctImageTags(c.Config.Workload.Phases)
 
 	for _, imageTag := range distinctImageTags {
-		switch imageTag {
-		case "hyperfaas-echo:latest":
-			c.funcDataProviders[imageTag] = NewEchoDataProvider(256, 1024)
-		case "hyperfaas-bfs-json:latest":
-			c.funcDataProviders[imageTag] = NewBFSJSONDataProvider(100, 250)
-		case "hyperfaas-thumbnailer-json:latest":
-			c.funcDataProviders[imageTag] = NewThumbnailerJSONDataProvider()
+		config, exists := c.Config.DataProviders[imageTag]
+		if !exists {
+			c.l.Error("No data provider configuration found for image tag", "imageTag", imageTag)
+			continue
 		}
+		
+		provider, err := CreateDataProvider(imageTag, config)
+		if err != nil {
+			c.l.Error("Failed to create data provider", "imageTag", imageTag, "error", err)
+			continue
+		}
+		c.funcDataProviders[imageTag] = provider
 	}
 
 	return c
@@ -195,6 +201,7 @@ func WithCollector(collector *Collector) Option {
 		c.collector = collector
 	}
 }
+
 
 func getDistinctImageTags(phases []TestPhase) []string {
 	imageTags := make(map[string]bool)

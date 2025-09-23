@@ -99,17 +99,24 @@ EOT
 STOPSIGNAL SIGINT
 
 
-CMD ["hyperfakeworker", \
-     "-m", "/app/models/hyperfaas-bfs-json.onnx", "hyperfaas-bfs-json", \
-     "-m", "/app/models/hyperfaas-echo.onnx", "hyperfaas-echo", \
-     "-m", "/app/models/hyperfaas-thumbnailer-json.onnx", "hyperfaas-thumbnailer-json", \
-     "--address", "localhost:50051", \
-     "--database-type", "http", \
-     "--runtime", "docker", \
-     "--timeout", "20", \
-     "--auto-remove", \
-     "--log-level", "debug", \
-     "--log-format", "text", \
-     "--log-file", "stdout", \
-#     "--containerized", \
-     "server"]
+# Auto-discover models script
+RUN echo '#!/bin/bash\n\
+args=()\n\
+for model in /app/models/*.onnx; do\n\
+  if [ -f "$model" ]; then\n\
+    basename=$(basename "$model" .onnx)\n\
+    args+=("-m" "$model" "$basename")\n\
+  fi\n\
+done\n\
+exec hyperfakeworker "${args[@]}" \\\n\
+     "--address" "localhost:50051" \\\n\
+     "--database-type" "http" \\\n\
+     "--runtime" "docker" \\\n\
+     "--timeout" "20" \\\n\
+     "--auto-remove" \\\n\
+     "--log-level" "debug" \\\n\
+     "--log-format" "text" \\\n\
+     "--log-file" "stdout" \\\n\
+     "server"' > /app/start.sh && chmod +x /app/start.sh
+
+CMD ["/app/start.sh"]

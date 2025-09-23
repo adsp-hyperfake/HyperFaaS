@@ -2,6 +2,7 @@ package loadgen
 
 import (
 	"encoding/base64"
+	"fmt"
 	"io"
 	"math/rand"
 	"net/http"
@@ -10,6 +11,45 @@ import (
 
 type DataProvider interface {
 	GetData() []byte
+}
+
+// DataProviderFactory creates a DataProvider from configuration
+type DataProviderFactory func(config *DataProviderConfig) (DataProvider, error)
+
+// Registry holds all available data provider factories
+var dataProviderRegistry = make(map[string]DataProviderFactory)
+
+// RegisterDataProvider registers a data provider factory with a type name
+func RegisterDataProvider(providerType string, factory DataProviderFactory) {
+	dataProviderRegistry[providerType] = factory
+}
+
+// CreateDataProvider creates a data provider using the registry (replaces switch-case)
+func CreateDataProvider(imageTag string, config *DataProviderConfig) (DataProvider, error) {
+	factory, exists := dataProviderRegistry[config.Type]
+	if !exists {
+		return nil, fmt.Errorf("unknown data provider type: %s for image tag: %s. Available types: %v", 
+			config.Type, imageTag, getRegisteredTypes())
+	}
+	return factory(config)
+}
+
+// getRegisteredTypes returns a list of all registered provider types (for error messages)
+func getRegisteredTypes() []string {
+	var types []string
+	for t := range dataProviderRegistry {
+		types = append(types, t)
+	}
+	return types
+}
+
+// DataProviderConfig represents configuration for any data provider
+type DataProviderConfig struct {
+	Type         string `yaml:"type"`
+	MinBodySize  int    `yaml:"min_body_size,omitempty"`
+	MaxBodySize  int    `yaml:"max_body_size,omitempty"`
+	MinNodes     int    `yaml:"min_nodes,omitempty"`
+	MaxNodes     int    `yaml:"max_nodes,omitempty"`
 }
 
 type EchoDataProvider struct {
@@ -70,6 +110,34 @@ func (e *EchoDataProvider) GetData() []byte {
 	return data
 }
 
+// Register echo data provider
+func init() {
+	RegisterDataProvider("echo", func(config *DataProviderConfig) (DataProvider, error) {
+		minSize := config.MinBodySize
+		if minSize == 0 {
+			minSize = 256 // default
+		}
+		maxSize := config.MaxBodySize
+		if maxSize == 0 {
+			maxSize = 1024 // default
+		}
+		return NewEchoDataProvider(minSize, maxSize), nil
+	})
+	
+	// Generic provider (reuses echo with different defaults)
+	RegisterDataProvider("generic", func(config *DataProviderConfig) (DataProvider, error) {
+		minSize := config.MinBodySize
+		if minSize == 0 {
+			minSize = 512 // default for generic
+		}
+		maxSize := config.MaxBodySize
+		if maxSize == 0 {
+			maxSize = 2048 // default for generic
+		}
+		return NewEchoDataProvider(minSize, maxSize), nil
+	})
+}
+
 /*
 this is what bfs json expects
 
@@ -96,6 +164,21 @@ func (b *BFSJSONDataProvider) GetData() []byte {
 	buf = strconv.AppendInt(buf, int64(size), 10)
 	buf = append(buf, '}')
 	return buf
+}
+
+// Register BFS JSON data provider
+func init() {
+	RegisterDataProvider("bfs_json", func(config *DataProviderConfig) (DataProvider, error) {
+		minNodes := config.MinNodes
+		if minNodes == 0 {
+			minNodes = 100 // default
+		}
+		maxNodes := config.MaxNodes
+		if maxNodes == 0 {
+			maxNodes = 250 // default
+		}
+		return NewBFSJSONDataProvider(minNodes, maxNodes), nil
+	})
 }
 
 func fetchThumbnailerImage() ([]byte, error) {
@@ -148,4 +231,11 @@ func (t *ThumbnailerJSONDataProvider) GetData() []byte {
 	buf = strconv.AppendInt(buf, int64(height), 10)
 	buf = append(buf, '}')
 	return buf
+}
+
+// Register Thumbnailer JSON data provider
+func init() {
+	RegisterDataProvider("thumbnailer_json", func(config *DataProviderConfig) (DataProvider, error) {
+		return NewThumbnailerJSONDataProvider(), nil
+	})
 }

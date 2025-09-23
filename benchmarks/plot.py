@@ -6,11 +6,29 @@ import os
 from collections.abc import Mapping
 import time
 
-IMAGE_PALETTE = {
-    "hyperfaas-bfs-json:latest": "blue",
-    "hyperfaas-echo:latest": "red",
-    "hyperfaas-thumbnailer-json:latest": "green",
-}
+# Extended color palette for new functions
+COLORS = [
+    "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", 
+    "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf",
+    "#aec7e8", "#ffbb78", "#98df8a", "#ff9896", "#c5b0d5",
+    "#c49c94", "#f7b6d3", "#c7c7c7", "#dbdb8d", "#9edae5"
+]
+
+def generate_image_palette(image_tags):
+    """
+    Generate a color palette for image tags, preserving existing colors
+    and automatically assigning new colors for unknown functions.
+    """
+    unique_tags = sorted(set(image_tags))
+    palette = {}
+
+    # Assign colors to new functions
+    color_index = 0
+    for tag in unique_tags:
+        palette[tag] = COLORS[color_index % len(COLORS)]
+        color_index += 1
+    
+    return palette
 
 # Consistent palette for run/worker type labels in multi-run comparisons
 RUN_PALETTE = {
@@ -198,8 +216,10 @@ class Plotter:
         # only successful requests for latency scatter
         successful_df = df[df['status'] == 'OK'].copy()
         if not successful_df.empty:
+            image_tags = successful_df['image_tag'].unique() if 'image_tag' in successful_df.columns else []
+            dynamic_palette = generate_image_palette(image_tags)
             sns.scatterplot(data=successful_df, x='timestamp', y='grpc_req_duration', 
-                        hue='image_tag', palette=IMAGE_PALETTE, alpha=0.6, ax=ax2)
+                        hue='image_tag', palette=dynamic_palette, alpha=0.6, ax=ax2)
         ax2.set_title("Request Latency Over Time (Successful Requests Only)", fontsize=14, fontweight='bold')
         ax2.set_xlabel('Time', fontsize=12)
         ax2.set_ylabel('Latency (ms)', fontsize=12)
@@ -285,8 +305,11 @@ class Plotter:
         plt.figure(figsize=(15, 8))
         
         # Create the plot for individual functions
+        # Generate dynamic palette based on actual image tags in the data
+        image_tags = df['image_tag'].unique() if 'image_tag' in df.columns else []
+        dynamic_palette = generate_image_palette(image_tags)
         sns.lineplot(data=df, x='second', y='expected_rps', hue='image_tag', 
-                    marker='o', markersize=4, palette=IMAGE_PALETTE)
+                    marker='o', markersize=4, palette=dynamic_palette)
         
         # Add total RPS line
         total_rps = df.groupby('second')['expected_rps'].sum().reset_index()
