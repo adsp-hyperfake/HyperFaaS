@@ -28,7 +28,7 @@ services:
       context: .
       dockerfile: debianworker.Dockerfile
     volumes:
-      - ./linear-training/models.json:/app/models/models.json
+      - ./hyperFakeWorker/models/models.json:/app/models/models.json
       - ./hyperFakeWorker/models/:/app/onnx-models/
     ports:
       - "50051:50051"
@@ -40,7 +40,7 @@ services:
      "--runtime=${FAKE_RUNTIME_TYPE}",
      "--timeout=20",
      "--auto-remove",
-     "--fake-models-path=/app/onnx-models/",
+     "--fake-models-path=${FAKE_MODELS_PATH}",
      "--log-level=debug",
      "--log-format=text",
      "--containerized=true",

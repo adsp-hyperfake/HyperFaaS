@@ -75,7 +75,14 @@ d:
 
 # make sure that the onnx models are in hyperFakeModel/
 fake-start runtime_type:
-    FAKE_RUNTIME_TYPE={{runtime_type}} WORKER_TYPE=fake-worker docker compose up --scale worker=0 fake-worker leaf database -d --build
+    #!/bin/bash
+    if [ "{{runtime_type}}" = "fake-linear" ]; then \
+        FAKE_MODELS_PATH="/app/models/models.json"; \
+    else \
+        FAKE_MODELS_PATH="/app/onnx-models/"; \
+    fi; \
+    echo "Using runtime: {{runtime_type}}, models path: $FAKE_MODELS_PATH"; \
+    FAKE_RUNTIME_TYPE={{runtime_type}} FAKE_MODELS_PATH="$FAKE_MODELS_PATH" WORKER_TYPE=fake-worker docker compose up --scale worker=0 fake-worker leaf database -d --build
 fake-stop:
     WORKER_TYPE=fake-worker docker compose down
 fake-restart:
