@@ -172,7 +172,6 @@ def export_model_to_onnx(cpu, model, path):
         output_names=["output"],
         do_constant_folding=True,  # Optimize the model
         export_params=True,
-        use_external_data_format=False,
         opset_version=19,
     )
     print(f"Exported model to {path}.")
@@ -716,7 +715,7 @@ def run_optuna_study(
         "gradient_clipping": study.best_params["gradient_clipping"],
     }
 
-    onnx_export_path = os.path.join(export_dir, f"{identifier}.onnx")
+    onnx_export_path = os.path.join(export_dir, f"hyperfaas-{identifier}.onnx")
     # Train the model with the best hyperparameters
     if final_epochs > 0:
         val_score_final_training = setup_model_training(
@@ -764,7 +763,7 @@ def manual_pipeline(
         else:
             X, y = create_sample_data(input_cols=input_cols, output_cols=output_cols)
         identifier = short_name + "_" + datetime.now().strftime("%m%d_%H%M")
-        onnx_export_path = os.path.join(export_dir, f"{short_name}.onnx")
+        onnx_export_path = os.path.join(export_dir, f"hyperfaas-{short_name}.onnx")
         setup_model_training(cpu, identifier, onnx_export_path, X, y, epochs, output_cols, hyperparams)
 
 
