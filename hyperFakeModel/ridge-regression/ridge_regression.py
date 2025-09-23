@@ -140,8 +140,9 @@ def evaluate_multi(y_true, y_pred, col_names):
 
 def export_pipeline_to_onnx(pipeline, input_dim, target_path):
     """Export the fitted pipeline directly to ONNX format."""
-    initial_type = [('float_input', FloatTensorType([None, input_dim]))]
-    onnx_model = convert_sklearn(pipeline, initial_types=initial_type)
+    initial_type = [('input', FloatTensorType([None, input_dim]))]
+    final_type = [('output', FloatTensorType([None, 3]))]  # 3 outputs: runtime, cpu, ram
+    onnx_model = convert_sklearn(pipeline, initial_types=initial_type, final_types=final_type)
     onnx.save_model(onnx_model, target_path)
     print(f"Exported model to '{target_path}'")
 
