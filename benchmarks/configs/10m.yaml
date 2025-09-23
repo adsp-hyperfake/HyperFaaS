@@ -9,6 +9,11 @@ function_config:
     cpu:
       period: 100000
       quota: 50000
+  hyperfaas-hello:latest:
+    memory: 128MB
+    cpu:
+      period: 100000
+      quota: 25000
   hyperfaas-bfs-json:latest:
     memory: 2GB
     cpu:
@@ -24,6 +29,10 @@ data_providers:
     type: "echo"
     min_body_size: 256
     max_body_size: 1024
+  hyperfaas-hello:latest:
+    type: "generic"
+    min_body_size: 64
+    max_body_size: 256
   hyperfaas-bfs-json:latest:
     type: "bfs_json"
     min_nodes: 100
@@ -48,6 +57,23 @@ patterns:
       step:
         min: 20
         max: 30
+  hello:
+    image_tag: hyperfaas-hello:latest
+    phase_count:
+      min: 8
+      max: 10
+    constant_likelihood: 0.6
+    ramping_likelihood: 0.4
+    parameters:
+      start_rps:
+        min: 100
+        max: 200
+      end_rps:
+        min: 2000
+        max: 3000
+      step:
+        min: 50
+        max: 100
   bfs:
     image_tag: hyperfaas-bfs-json:latest
     phase_count:
