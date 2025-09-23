@@ -55,9 +55,9 @@ def main():
 def get_image_tags(conn):
     """Get unique function image tags from training data"""
     query = """
-        SELECT DISTINCT function_image_tag 
+        SELECT DISTINCT image_tag 
         FROM training_data 
-        WHERE function_image_tag IS NOT NULL AND function_image_tag != ''
+        WHERE image_tag IS NOT NULL AND image_tag != ''
     """
     cursor = conn.execute(query)
     return [row[0] for row in cursor.fetchall()]
@@ -66,25 +66,25 @@ def load_training_data(conn, image_tag):
     """Load training data for a specific image tag"""
     query = """
         SELECT 
-            request_body_size,
+            request_size_bytes,
             function_instances_count,
             active_function_calls_count,
             worker_cpu_usage,
             worker_ram_usage,
-            function_runtime,
+            function_processing_time_ns,
             function_cpu_usage,
             function_ram_usage
         FROM training_data 
-        WHERE function_image_tag = ? 
-        AND request_body_size IS NOT NULL 
+        WHERE image_tag = ? 
+        AND request_size_bytes IS NOT NULL 
         AND function_instances_count IS NOT NULL
         AND active_function_calls_count IS NOT NULL
         AND worker_cpu_usage IS NOT NULL
         AND worker_ram_usage IS NOT NULL
-        AND function_runtime IS NOT NULL
+        AND function_processing_time_ns IS NOT NULL
         AND function_cpu_usage IS NOT NULL
         AND function_ram_usage IS NOT NULL
-        AND function_runtime > 0
+        AND function_processing_time_ns > 0
     """
     
     df = pd.read_sql_query(query, conn, params=(image_tag,))
@@ -95,7 +95,7 @@ def train_model(image_tag, data):
     try:
         # Features: [body_size, instances, active_calls, worker_cpu, worker_ram]
         feature_columns = [
-            'request_body_size',
+            'request_size_bytes',
             'function_instances_count', 
             'active_function_calls_count',
             'worker_cpu_usage',
@@ -105,7 +105,7 @@ def train_model(image_tag, data):
         X = data[feature_columns].values
         
         # Targets (convert runtime from nanoseconds to milliseconds)
-        y_runtime = data['function_runtime'].values / 1e6  # ns to ms
+        y_runtime = data['function_processing_time_ns'].values / 1e6  # ns to ms
         y_cpu = data['function_cpu_usage'].values
         y_ram = data['function_ram_usage'].values
         
@@ -155,7 +155,7 @@ def train_model(image_tag, data):
         # Create model dict compatible with Go structure
         model = {
             'image_tag': image_tag,
-            'runtime_coeffs': list(runtime_coeffs) + [runtime_intercept],  # [body_size, instances, active_calls, worker_cpu, worker_ram, intercept]
+            'runtime_coeffs': list(runtime_coeffs) + [runtime_intercept],  # [request_size_bytes, instances, active_calls, worker_cpu, worker_ram, intercept]
             'cpu_coeffs': list(cpu_coeffs) + [cpu_intercept],
             'ram_coeffs': list(ram_coeffs) + [ram_intercept], 
             'sample_count': len(data),
