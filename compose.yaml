@@ -29,7 +29,7 @@ services:
       dockerfile: debianworker.Dockerfile
     volumes:
       - ./linear-training/models.json:/app/models/models.json
-      - ./hyperFakeModel/:/app/onnx-models/
+      - ./hyperFakeWorker/models/:/app/onnx-models/
     ports:
       - "50051:50051"
     networks:
