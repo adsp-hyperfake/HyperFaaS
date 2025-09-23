@@ -124,6 +124,11 @@ train-ridge-regression db_path="../../benchmarks/metrics.db" table="training_dat
         uv sync && \
         uv run ridge_regression.py --db-path {{db_path}} --table {{table}} --alpha-min {{alpha_min}} --alpha-max {{alpha_max}} --alpha-num {{alpha_num}} --cv-folds {{cv_folds}} --test-size {{test_size}} --val-size {{val_size}} --random-state {{random_state}}
 
+train-linear-regression db_path="../../benchmarks/metrics.db" output="models.json":
+    cd hyperFakeModel/linear-training && \
+        uv sync && \
+        uv run train_models.py --db {{db_path}} --output {{output}}
+
 
 #################################
 # Training Stuff - Neural Network
@@ -368,6 +373,3 @@ k6-pprof:
 
 k6-memory:
     go tool pprof http://localhost:6565/debug/pprof/heap
-
-linear-train db_path output:
-    cd linear-training && uv run train_models.py --db {{db_path}} --output {{output}}
