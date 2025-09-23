@@ -279,6 +279,7 @@ metrics-verify:
 ############################
 run-full-pipeline config_file="benchmarks/configs/10m.yaml" out_file="results.csv":
     #!/bin/bash
+    rm -f benchmarks/{{out_file}}
     # run the load generation
     go run cmd/load-generator/main.go --config {{config_file}} --out benchmarks/{{out_file}}
     # call pull metrics script : this will fail unless you configure it correctly
@@ -299,14 +300,13 @@ run-full-pipeline config_file="benchmarks/configs/10m.yaml" out_file="results.cs
 
 # Local version of the pipeline that doesn't require remote connections
 run-local-pipeline config_file="benchmarks/configs/local.yaml" out_file="results.csv":
+    rm -f benchmarks/{{out_file}}
     mkdir -p benchmarks/plots
     go run cmd/load-generator/main.go --config {{config_file}} --out benchmarks/{{out_file}}
 
     cd benchmarks && uv run new_import.py --csv {{out_file}} --db metrics.db
     cd benchmarks && uv run process.py --db-path metrics.db
     cd benchmarks && uv run main.py --plot --db-path metrics.db --plot-save-path ./plots/ --prefix local
-
-    timestamp=$(date +%Y-%m-%d_%H-%M-%S)
     
 allow-reuse-connections:
     # Allow reusing TIME_WAIT sockets for new connections when safe

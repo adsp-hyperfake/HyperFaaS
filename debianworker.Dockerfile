@@ -23,6 +23,7 @@ RUN python3 -c "import onnxruntime; print('ONNX Runtime installed at:', onnxrunt
 
 COPY . .
 COPY ./cmd/worker/main.go .
+COPY ./hyperFakeWorker/models /app/models
 
 RUN go mod download
 
@@ -32,4 +33,4 @@ RUN CGO_ENABLED=1 GOOS=linux go build -o main main.go
 
 RUN mkdir -p /app/onnx-runtime
 
-CMD ["./main", "-address=0.0.0.0:50051", "-runtime=fake-onnx", "-log-level=debug", "-log-format=text", "--auto-remove=true", "-containerized=true", "-caller-server-address=0.0.0.0:50052", "-database-type=http"]
+CMD ["./main", "-address=0.0.0.0:50051", "-runtime=fake-onnx", "-log-level=debug", "-log-format=text", "--auto-remove=true", "-containerized=true", "-caller-server-address=0.0.0.0:50052", "-database-type=http", "--fake-models-path=/app/models"]
