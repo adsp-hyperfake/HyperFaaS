@@ -36,7 +36,7 @@ To get started with HyperFaaS, follow these steps:
    cd HyperFaaS
    ```
 
-2. Build components and the go functions:
+2. Build components and the Go functions:
    ```
    just build
    ```
@@ -155,17 +155,17 @@ just run-local-pipeline <config_file> <output_file>
 
 This will generate metrics data for the functions specified in the used config.
 
-#### 1.1 Data Generation on different VMs
+#### 1.1 Different VMs Setup
 
-To improve the quality of the results, you probably want to run HyperFaaS and the load generator in different VMs/ machines. For that purposes we have a script designed specially for SUT and Client.
+To improve the quality of the results, you probably want to run HyperFaaS and the load generator on different VMs/machines. For that purpose, we have a script designed specifically for SUT and Client.
 
-In the machine where you run the load generator, create or use a config file. You can see the existing config files in the benchmarks/configs folder. We have a script pull-metrics.sh that will pull the metrics from the SUT and save them to a local database. Make sure to configure it correctly.
+On the machine where you run the load generator, create or use a config file. You can see the existing config files in the `benchmarks/configs` folder. We have a script `pull-metrics.sh` that will pull the metrics from the SUT and save them to a local database. Make sure to configure it correctly.
 
 ```bash
 just run-full-pipeline <config_file> <output_file>
 ```
 
-The `out_file` is the csv file where the load generator will save the results. The results will automatically be processed and saved to a `sqlite` database inside the benchmarks folder. After that, everything gets moved to the `~/training_data` folder.
+The `output_file` is the CSV file where the load generator will save the results. The results will automatically be processed and saved to a SQLite database inside the `benchmarks` folder. After that, everything gets moved to the `~/training_data` folder.
 
 Now you are ready to train models.
 
@@ -178,7 +178,9 @@ HyperFake supports multiple machine learning algorithms:
 - [**Deep Neural Network**](./hyperFakeModel/neural-network/README.md)
 - [**Random Forest**](./hyperFakeModel/random-forest/README.md)
 
-Each README contains information how to train models on generated data and use them in fake worker.
+Each README contains information on how to train models on generated data and use them in the fake worker.
+
+There is also a [folder](./hyperFakeModel/examples/) with other algorithm examples. They are deprecated but can be used as inspiration for the development of other algorithms.
 
 ## Training Data Format
 
@@ -212,7 +214,7 @@ HyperFake provides two worker implementations:
 The Go implementation is recommended for experiments and production use.
 
 #### Usage
-Firstly, move the generated models (.onnx or .json) in `./hyperFakeWorker/models`.
+First, move the generated models (.onnx or .json) to `./hyperFakeWorker/models`.
 Then start the simulated HyperFaaS system:
 
 ```bash
@@ -223,11 +225,11 @@ just fake-start fake-onnx
 just fake-start fake-linear
 ```
 
-Right now you can send requests to the worker. The worker is started with all of the functions saved in `./hyperFakeWorker/models`.
+Now you can send requests to the worker. The worker is started with all functions saved in `./hyperFakeWorker/models`.
 
 ## Adding New Functions
 
-To add support in a pipeline for a new function:
+To add support for a new function in the pipeline:
 
 1. **Create the function**: Add your function to [`functions/go/`](./functions/go/) and build it with `just build-function-go <function_name>`
 

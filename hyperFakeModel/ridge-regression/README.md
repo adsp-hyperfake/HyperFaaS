@@ -64,6 +64,3 @@ For **thorough optimization** (best model):
 ```bash
 just train-ridge-regression ../../benchmarks/metrics.db training_data -4 4 50 5 0.2 0.25
 ```
-
-## Troubleshooting
-

@@ -8,12 +8,12 @@ For each function, we use [Optuna][0] to establish hyperparameters, then train a
 3. Set up the venv by running `just neural-setup-venv`
 4. Optionally test the setup, e.g. by running `just neural-optuna-test echo`. This will perform a short Optuna optimization for the `echo` function and automatically cleans up after itself.
 5. Establish the hyperparameters for each function.
-   In seperate tmux windows, run the following commands (function name as specified in `data-providers` section in your config, e.g. `hyperfaas-bfs-json`):
+   In separate tmux windows, run the following commands (function name as specified in `data-providers` section in your config, e.g. `hyperfaas-bfs-json`):
    - `just neural-optuna <function-name>`
 
    This process can take many hours, depending on the hardware setup and size of the metrics database.
 6. Finally, train the models.
-   In seperate tmux windows, run the following commands (function name as specified in `data-providers` section in your config, e.g. `hyperfaas-bfs-json`):
+   In separate tmux windows, run the following commands (function name as specified in `data-providers` section in your config, e.g. `hyperfaas-bfs-json`):
    - `just neural-train-model <function-name>`
 
    This will result in a `$function.onnx` and `$function.onnx.data` file for each function.

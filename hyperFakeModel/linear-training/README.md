@@ -29,4 +29,4 @@ Options:
 
 
 ## Troubleshooting
-Linear regression models are lightweight, so if you try to run load generator on fake worker with linear regression models probably you should reduce load in config files. Otherwise, most of requests will be timed out.
+Linear regression models are lightweight, so if you try to run the load generator on the fake worker with linear regression models, you should probably reduce the load in config files. Otherwise, most requests will time out.
