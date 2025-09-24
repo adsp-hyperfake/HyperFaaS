@@ -73,7 +73,7 @@ d:
 # Running Faked HyperFaaS
 ############################
 
-# make sure that the onnx models are in hyperFakeModel/
+# make sure that the onnx models are in hyperFakeWorker/models
 fake-start runtime_type:
     #!/bin/bash
     if [ "{{runtime_type}}" = "fake-linear" ]; then \
@@ -107,7 +107,7 @@ run-local-leaf:
     go run cmd/leaf/main.go --address=localhost:50050 --log-level=debug --log-format=text --worker-ids=127.0.0.1:50051 --database-address=http://localhost:8999
 
 ################################
-# Training Stuff - Random Forest
+# Training Stuff - Misc
 ################################
 
 train-random-forest db_path="../../benchmarks/metrics.db" table="training_data" n_estimators="100" max_depth="" min_samples_split="2" min_samples_leaf="1" max_features="sqrt" random_state="42" n_jobs="-1":
@@ -115,10 +115,8 @@ train-random-forest db_path="../../benchmarks/metrics.db" table="training_data" 
     cd hyperFakeModel/random-forest
     uv sync
     
-    # Build the command with conditional parameters
     cmd="uv run random_forest.py --db-path {{db_path}} --table {{table}} --n-estimators {{n_estimators}} --min-samples-split {{min_samples_split}} --min-samples-leaf {{min_samples_leaf}} --max-features {{max_features}} --random-state {{random_state}} --n-jobs {{n_jobs}}"
     
-    # Add max-depth only if specified (since None is the default)
     if [ "{{max_depth}}" != "" ]; then
         cmd="$cmd --max-depth {{max_depth}}"
     fi
@@ -156,7 +154,7 @@ neural-setup-venv python_version="python3.12":
 
 # Run Optuna optimization to get hyperparameters
 neural-optuna function trials="150" epochs="50" jobs="-1" final-epochs="0" samples="-1" extra_args="":
-    {{NEURAL_PYTHON}} {{NEURAL_CLI}} optuna --func-tag hyperfaas-{{function}}:latest --short-name {{function}} \
+    {{NEURAL_PYTHON}} {{NEURAL_CLI}} optuna --func-tag {{function}}:latest --short-name {{function}} \
         --trials {{trials}} \
         --epochs {{epochs}} \
         --jobs {{jobs}} \
@@ -202,7 +200,7 @@ neural-train-model function epochs="200" hyperparams_path="" extra_args="":
         hyperparams_path="${matches[0]}"
         echo "No hyperparams specified, continuing with hyperparams found at $hyperparams_path"
     fi
-    {{NEURAL_PYTHON}} {{NEURAL_CLI}} manual --func-tag hyperfaas-{{function}}:latest --short-name {{function}} --epochs {{epochs}} --hyperparams $hyperparams_path {{extra_args}}
+    {{NEURAL_PYTHON}} {{NEURAL_CLI}} manual --func-tag {{function}}:latest --short-name {{function}} --epochs {{epochs}} --hyperparams $hyperparams_path {{extra_args}}
 
 # Train the model on the specified input columns (space-separated single argument) only
 neural-train-model-cols function cols epochs="200" hyperparams_path="" extra_args="":
@@ -226,7 +224,7 @@ neural-clean:
     # Move all contents from 'your_folder' (except the new subfolder) to the timestamp subfolder
     find $origin -mindepth 1 -maxdepth 1 -type f ! -name ".*" -exec mv {} $target \;
 
-neural-copy-models origin="./hyperFakeModel/neural-network/models/" target="./hyperFakeModel/":
+neural-copy-models origin="./hyperFakeModel/neural-network/models/" target="./hyperFakeWorker/models/":
     find "{{origin}}" -mindepth 1 -maxdepth 1 -type f \( -name "*.onnx" -o -name "*.onnx.data" \) -exec cp {} "{{target}}" \; -exec echo "Copied: {}" \;
 
 ############################

@@ -2,6 +2,7 @@
 
 HyperFaaS is a serverless platform with a tree-like load balancing structure. It consists of load balancer nodes that forward calls to worker nodes, which execute serverless functions.
 The load balancer nodes that forward calls to worker nodes are called "leaf nodes".
+
 ## Architecture
 
 HyperFaaS consists of three main components:
@@ -26,6 +27,7 @@ To get started with HyperFaaS, follow these steps:
 
 > **Note**
 > If you are running Windows, we heavily recommend using [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) to run HyperFaaS / justfile commands.
+
 ### Setup
 
 1. Clone the repository:
@@ -106,105 +108,143 @@ just clean
 ```
 
 # HyperFake
-The HyperFake project aims to provide a simulated HyperFaaS worker that is as close as possible to the real worker.
-To do this, we use different models to simulate the behavior of the real worker. Because the most compute and memory intensive part of the worker is (most likely) the function execution, we train a model per function image to predict the execution time and its resource usage.
-Additionally, we provide a set of tools to generate load, measure metrics and train models.
 
-## Generating Data
-We have modified the normal HyperFaaS components to collect metrics. To generate data, you have to first run HyperFaaS:
+HyperFake is a comprehensive simulation framework for HyperFaaS that provides a simulated worker node as close as possible to the real worker. Instead of executing actual serverless functions, HyperFake uses machine learning models to predict function execution time and resource usage, enabling large-scale performance testing and analysis without the overhead of real function execution.
+
+## Overview
+
+HyperFake simulates the most compute and memory-intensive part of the HyperFaaS worker: function execution. For each function image, we train models to predict:
+
+- **Execution Time**: Function runtime in nanoseconds
+- **CPU Usage**: CPU cores consumed during execution  
+- **Memory Usage**: RAM bytes consumed during execution
+
+The framework includes tools for data generation, model training, and deployment of the simulated workers.
+
+## Architecture
+
+HyperFake consists of several key components:
+
+- **Data Collection Pipeline** ([`benchmarks/`](./benchmarks/), [`pkg/loadgen`](./pkg/loadgen/)): Tools for generating training data from real HyperFaaS runs
+- **Machine Learning Models** ([`hyperFakeModel/`](./hyperFakeModel/)): Multiple algorithm implementations for function behavior prediction
+- **Fake Workers**: Simulated worker implementations in both Python ([`hyperFakeWorker/`](./hyperFakeWorker/)) and Go
+- **Benchmarking Tools**: Load generators and metrics collection and plotting systems
+
+## Quick Start
+
+### 1. Data Generation
+
+First, build the functions:
+
+```bash
+just build-functions-go
 ```
+
+Then, generate training data by running HyperFaaS with metrics collection:
+
+```bash
+# Start HyperFaaS
 just start
-```
-In another terminal, run the metrics client:
-```
+
+# In another terminal, start metrics client
 just metrics-client
+
+# Run load generator (optionally with config file)
+just run-local-pipeline <config_file> <output_file>
 ```
 
-To improve the quality of the results, you probably want to run HyperFaaS and the load generator in different VMs/ machines.
+This will generate metrics data for the functions specified in the used config.
 
-In the machine where you run the load generator, create or use a config file. You can see the existing config files in the `benchmarks/configs` folder.
-We have a script `pull-metrics.sh` that will pull the metrics from the SUT and save them to a local database. Make sure to configure it correctly.
+#### 1.1 Data Generation on different VMs
 
-Then, you can run the load generator:
+To improve the quality of the results, you probably want to run HyperFaaS and the load generator in different VMs/ machines. For that purposes we have a script designed specially for SUT and Client.
+
+In the machine where you run the load generator, create or use a config file. You can see the existing config files in the benchmarks/configs folder. We have a script pull-metrics.sh that will pull the metrics from the SUT and save them to a local database. Make sure to configure it correctly.
+
+```bash
+just run-full-pipeline <config_file> <output_file>
 ```
-just run-full-pipeline <config_file> <out_file>
-```
-The `out_file` is the csv file where the load generator will save the results.
-The results will automatically be processed and saved to a sqlite database inside the `benchmarks` folder.
-After that, everything gets moved to the `~/training_data` folder.
+
+The `out_file` is the csv file where the load generator will save the results. The results will automatically be processed and saved to a `sqlite` database inside the benchmarks folder. After that, everything gets moved to the `~/training_data` folder.
 
 Now you are ready to train models.
 
-## Training Models - Neural Network
+### 2. Model Training
 
-For each function, we use [Optuna][0] to establish hyperparameters, then train and export the final model in the [ONNX][1] format. This can be done in a few steps:
+HyperFake supports multiple machine learning algorithms:
 
-1. Copy the database (or databases) to train the models on to `./hyperFakeModel/training_dbs`.
-2. Run `just neural-clean` to prepare the `./hyperFakeModel/neural-network/models` folder. Its contents will get moved to a subfolder.
-3. Set up the venv by running `just neural-setup-venv`
-4. Optionally test the setup, e.g. by running `just neural-optuna-test echo`. This will perform a short Optuna optimization for the `echo` function and automatically cleans up after itself.
-5. Establish the hyperparameters for each function.
-   In seperate tmux windows, run the following commands.
-   - `just neural-optuna bfs-json`
-   - `just neural-optuna thumbnailer-json`
-   - `just neural-optuna echo`
+- [**Linear Regression**](./hyperFakeModel/linear-training/README.md)
+- [**Ridge Regression**](./hyperFakeModel/ridge-regression/README.md)
+- [**Deep Neural Network**](./hyperFakeModel/neural-network/README.md)
+- [**Random Forest**](./hyperFakeModel/random-forest/README.md)
 
-   This process will take many hours, depending on the hardware setup.
-6. Finally, train the models by running the following commands in seperate tmux windows:
-   - `just neural-train-model bfs-json`
-   - `just neural-train-model thumbnailer-json`
-   - `just neural-train-model echo`
+Each README contains information how to train models on generated data and use them in fake worker.
 
-   This will result in a `$function.onnx` and `$function.onnx.data` file for each function.
-7. Copy the models to the target folder: `just neural-copy-models`
+## Training Data Format
 
-### Training on a subset of the training data
+Models are trained on the following input features:
+- Request body size (bytes)
+- Number of function instances
+- Number of active function calls
+- Worker CPU usage (cores)
+- Worker RAM usage (bytes)
 
-By default, step 6 will train on all the following columns of the training data:
+And predict these output values:
+- Function runtime (nanoseconds)
+- Function CPU usage (cores)
+- Function RAM usage (bytes)
 
-- "request_body_size"
-- "function_instances_count"
-- "active_function_calls_count"
-- "worker_cpu_usage"
-- "worker_ram_usage"
+Each row should contain the information for one function call.
 
-In case you want to train on a subset of the columns, run
+| Parameter | Body Size | Number of Function Instances | Number of active Function Calls | Worker CPU Usage | Worker RAM Usage | Function Runtime | Function CPU Usage | Function RAM Usage |
+| --------- | --------- | ---------------------------- | ------------------------------- | ---------------- | ---------------- | ---------------- | ------------------ | ------------------ |
+| Unit      | Byte      | Count                        | Count                           | Cores            | Bytes            | Nanoseconds      | Cores              | Bytes              |
+| Type      | Int64     | Int64                        | Int64                           | Float64          | Int64            | Int64            | Float64            | Int64              |
 
-`just neural-train-model-cols function "space-separated columns"`.
 
-For example, run
+### 3. Running HyperFake
 
-`just neural-train-model-cols bfs-json "worker_cpu_usage worker_ram_usage"`
+HyperFake provides two worker implementations:
 
-to train the bfs-json function on just the two columns "worker_cpu_usage worker_ram_usage".
-### [hyperFake Model](./hyperFakeModel/README.md)
+- **Go Implementation**: Production-ready fake worker integrated with the main HyperFaaS codebase
+- **Python Implementation** ([`hyperFakeWorker/`](./hyperFakeWorker/)): Standalone Python implementation for development and testing
 
-## Training Models - Random Forest
+The Go implementation is recommended for experiments and production use.
 
-TODO
+#### Usage
+Firstly, move the generated models (.onnx or .json) in `./hyperFakeWorker/models`.
+Then start the simulated HyperFaaS system:
 
-## HyperFake Workers
-There is two implementations of the HyperFake worker, one in Python (./hyperFakeWorker/) and one in Go, which is a modification of the real worker.
-The Go implementation is the one that was last used for the experiments.
-In order to run the Go fake worker, you just have to provide the appropiate flags to it.
-We recommend doing so with the justfile command:
+```bash
+# Run with ONNX models
+just fake-start fake-onnx
 
-```justfile
-# make sure that the onnx models are in hyperFakeModel/
-fake-start runtime_type:
-    FAKE_RUNTIME_TYPE={{runtime_type}} WORKER_TYPE=fake-worker docker compose up --scale worker=0 fake-worker leaf database -d --build
+# Or run with linear regression json models
+just fake-start fake-linear
 ```
-If the runtime type is `fake-onnx`, the worker will load the onnx models using a hard coded mapping for simplicity:
 
-```
-"hyperfaas-echo:latest":             "echo.onnx",
-"hyperfaas-bfs-json:latest":         "bfs-json.onnx",
-"hyperfaas-thumbnailer-json:latest": "thumbnailer-json.onnx",
-```
-### Adding new models
+Right now you can send requests to the worker. The worker is started with all of the functions saved in `./hyperFakeWorker/models`.
 
-To add new models, you have to modify the main.go of the worker and include a new mapping of the image name to the model name, and make sure to add the model to the `./hyperFakeModel/` folder.
+## Adding New Functions
 
+To add support in a pipeline for a new function:
 
-[0]: https://optuna.org/
-[1]: https://onnx.ai/
+1. **Create the function**: Add your function to [`functions/go/`](./functions/go/) and build it with `just build-function-go <function_name>`
+
+2. **Add to configuration**: Add your function to the load generation config file (e.g., [`benchmarks/configs/local.yaml`](./benchmarks/configs/local.yaml)) with appropriate resource limits and data providers:
+   ```yaml
+   function_config:
+     hyperfaas-my-function:latest:
+       memory: 512MB
+       cpu:
+         period: 100000
+         quota: 50000
+   data_providers:
+     hyperfaas-my-function:latest:
+       type: "my_function"
+       # Add function-specific parameters
+   patterns:
+     my_function:
+       image_tag: hyperfaas-my-function:latest
+       # Add load pattern configuration
+   ```
