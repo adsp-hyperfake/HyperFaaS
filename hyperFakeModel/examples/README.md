@@ -1,6 +1,6 @@
 # HyperFaaS Resource Prediction Models
 
-A comprehensive machine learning framework for predicting serverless function resource usage (now only CPU and memory) based on function call patterns and system metrics.
+A machine learning framework for predicting serverless function resource usage (now only CPU and memory) based on function call patterns and system metrics.
 
 ## Available Models
 

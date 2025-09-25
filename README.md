@@ -109,7 +109,7 @@ just clean
 
 # HyperFake
 
-HyperFake is a comprehensive simulation framework for HyperFaaS that provides a simulated worker node as close as possible to the real worker. Instead of executing actual serverless functions, HyperFake uses machine learning models to predict function execution time and resource usage, enabling large-scale performance testing and analysis without the overhead of real function execution.
+HyperFake is a simulation framework for HyperFaaS that provides a simulated worker node as close as possible to the real worker. Instead of executing actual serverless functions, HyperFake uses machine learning models to predict function execution time and resource usage, enabling large-scale performance testing and analysis without the overhead of real function execution.
 
 ## Overview
 
