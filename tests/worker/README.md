@@ -1,28 +1,23 @@
 # Tests
 
-ATTENTION: Note that due to docker things it is possible that the tests fail due to docker mishaps, if tht tests fail with your changes it's not necessarily the fault of your changes. Just run the tests  again...
+ATTENTION: Note that due to Docker issues, it is possible that tests fail due to Docker mishaps. If the tests fail with your changes, it's not necessarily the fault of your changes. Just run the tests again...
 
 ## Functionality
 
 The idea behind these integration tests is that they can be run using a number of different parameters. You can choose:
   - container runtime (e.g. docker, fake, tbc...)
-  - different dev environments (locally for fast iteration cycles, containerized or more specifically dockerized using docker compose 
-for more realistic prod circumstances
+  - different dev environments (locally for fast iteration cycles, containerized or more specifically dockerized using Docker Compose for more realistic production circumstances
   - which tests should be run (c.f. [TestCases](#test-cases))
   - every test case is written into one function and can be executed completely independently of one another
 
 ## How configuration works
-To not have to pass a mile of flags every time you want to run the tests (or having to edit a just command) there is a json file
-containing the configuration for all development-related setup but also for all arguments passed to the tests.
+To avoid having to pass a mile of flags every time you want to run the tests (or having to edit a just command), there is a JSON file containing the configuration for all development-related setup and also for all arguments passed to the tests.
 
-This JSON file is parsed at runtime and will set all the params accordingly. BUT since you also don't want to change something in a 
-json file every time you want to change something small, the json config can be overridden using flags passed to the binary.
+This JSON file is parsed at runtime and will set all the parameters accordingly. However, since you also don't want to change something in a JSON file every time you want to change something small, the JSON config can be overridden using flags passed to the binary.
 
 Available flags are shown below. 
 
-It is important to note that as of today (2025-02-22) only the worker is tested using the integration tests. I think ideally we want
-to define tests on a higher level (e.g. Leaf-Node or Leaf) in a different file to separate concerns enable the developer to tests more
-specifically.
+It is important to note that as of today (2025-02-22), only the worker is tested using the integration tests. Ideally, we want to define tests on a higher level (e.g., Leaf-Node or Leaf) in a different file to separate concerns and enable the developer to test more specifically.
 
 
 ## Params
@@ -71,4 +66,4 @@ listen to the incoming events and compare them to the ones that are expected
 
 ## Known bugs
 
-- there seems to be a case where the mock runtime (dead)locks itself, im not sure what causes ist, but it doesn't happen always
+- There seems to be a case where the mock runtime deadlocks itself. I'm not sure what causes it, but it doesn't happen always

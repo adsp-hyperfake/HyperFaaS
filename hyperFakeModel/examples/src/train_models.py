@@ -26,7 +26,7 @@ from model_factory import ModelFactory
 
 
 class ModelTrainer:
-    """Comprehensive training pipeline for resource prediction models."""
+    """Training pipeline for resource prediction models."""
     
     def __init__(self, config_path: str):
         """

@@ -120,10 +120,6 @@ def print_request_latency_analysis(results: dict):
     print(f"Total errors: {results['total_errors']}")
     print()
 
-    print("Request Latency by Scenario and Image Tag:")
-    print(results['latency_by_scenario_image'])
-    print()
-
 def print_data_transfer_analysis(results: dict):
     """Print data transfer analysis results."""
     print("Data Sent by Image Tag (Bytes):")
