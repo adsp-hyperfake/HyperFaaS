@@ -40,13 +40,9 @@ def generate_short_names(func_tags):
     """Generate short names from function tags."""
     short_names = []
     for tag in func_tags:
-        # Extract function name from tag (remove hyperfaas- prefix and :latest suffix)
-        # Example: hyperfaas-bfs-json:latest -> bfs-json
-        if tag.startswith("hyperfaas-") and tag.endswith(":latest"):
-            short_name = tag[len("hyperfaas-"):-len(":latest")]
-        else:
-            # Fallback: use the part before the first colon
-            short_name = tag.split(":")[0]
+        # Extract function name from tag (remove :latest suffix)
+        # Example: hyperfaas-bfs-json:latest -> hyperfaas-bfs-json
+        short_name = tag.split(":")[0]
         short_names.append(short_name)
     return short_names
 

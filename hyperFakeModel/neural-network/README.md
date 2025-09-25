@@ -4,19 +4,19 @@ Trains a multi-layer perceptron and exports the model as .ONNX.
 For each function, we use [Optuna][0] to establish hyperparameters, then train and export the final model in the [ONNX][1] format. This can be done in a few steps:
 
 1. Copy the database (or databases) to train the models on to `./hyperFakeModel/training_dbs`.
-2. Run `just neural-clean` to prepare the `./hyperFakeModel/neural-network/models` folder. Its contents will get moved to a subfolder.
+2. In the project root, run `just neural-clean` to prepare the `./hyperFakeModel/neural-network/models` folder. Its contents will get moved to a subfolder.
 3. Set up the venv by running `just neural-setup-venv`
-4. Optionally test the setup, e.g. by running `just neural-optuna-test echo`. This will perform a short Optuna optimization for the `echo` function and automatically cleans up after itself.
+4. Optionally test the setup, e.g. by running `just neural-optuna-test hyperfaas-echo`. This will perform a short Optuna optimization for the `hyperfaas-echo` function and automatically cleans up after itself.
 5. Establish the hyperparameters for each function.
-   In separate tmux windows, run the following commands (function name as specified in `data-providers` section in your config, e.g. `hyperfaas-bfs-json`):
+   In separate tmux windows, run the following command for each function (function name as specified in `data-providers` section in your config, e.g. `hyperfaas-bfs-json`):
    - `just neural-optuna <function-name>`
 
    This process can take many hours, depending on the hardware setup and size of the metrics database.
 6. Finally, train the models.
-   In separate tmux windows, run the following commands (function name as specified in `data-providers` section in your config, e.g. `hyperfaas-bfs-json`):
+   In separate tmux windows, run the following command for each function (function name as specified in `data-providers` section in your config, e.g. `hyperfaas-bfs-json`):
    - `just neural-train-model <function-name>`
 
-   This will result in a `$function.onnx` and `$function.onnx.data` file for each function.
+   This will result in a `$function.onnx` model file for each function.
 7. Copy the models to the target folder: `just neural-copy-models`
 
 ## Training on a subset of the training data
@@ -35,9 +35,9 @@ In case you want to train on a subset of the columns, run
 
 For example, run
 
-`just neural-train-model-cols bfs-json "worker_cpu_usage worker_ram_usage"`
+`just neural-train-model-cols hyperfaas-bfs-json "worker_cpu_usage worker_ram_usage"`
 
-to train the bfs-json function on just the two columns "worker_cpu_usage worker_ram_usage".
+to train the hyperfaas-bfs-json function on just the two columns "worker_cpu_usage worker_ram_usage".
 
 ## Parameters
 
