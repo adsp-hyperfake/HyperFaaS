@@ -58,8 +58,8 @@ func (f *FunctionOnnxModel) ensureInitialized() error {
 	}
 
 	// Create input tensor for 5 features (body_size, instances, active_calls, worker_cpu, worker_ram)
-	f.inputData = make([]float32, 5)
-	f.inputTensor, err = ort.NewTensor(ort.NewShape(1, 5), f.inputData)
+	f.inputData = make([]float32, 4)
+	f.inputTensor, err = ort.NewTensor(ort.NewShape(1, 4), f.inputData)
 	if err != nil {
 		return fmt.Errorf("error creating input tensor: %w", err)
 	}
@@ -99,10 +99,10 @@ func (f *FunctionOnnxModel) PredictFunction(inputs FunctionInputs) (FunctionPred
 
 	// Prepare input data: [body_size, instances, active_calls, worker_cpu, worker_ram]
 	f.inputData[0] = float32(inputs.RequestBodySize)
-	f.inputData[1] = float32(inputs.FunctionInstances)
-	f.inputData[2] = float32(inputs.ActiveFunctionCalls)
-	f.inputData[3] = float32(inputs.WorkerCPUUsage)
-	f.inputData[4] = float32(inputs.WorkerRAMUsage)
+	// f.inputData[1] = float32(inputs.FunctionInstances)
+	f.inputData[1] = float32(inputs.ActiveFunctionCalls)
+	f.inputData[2] = float32(inputs.WorkerCPUUsage)
+	f.inputData[3] = float32(inputs.WorkerRAMUsage)
 
 	// Run the model
 	err := f.session.Run()

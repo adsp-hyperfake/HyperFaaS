@@ -83,7 +83,7 @@ class TrainingData:
             df = pd.read_sql_query(query, self.conn)
 
             # Convert timestamp from ISO format to nanoseconds
-            df[TIMESTAMP] = pd.to_datetime(df[TIMESTAMP]).astype(np.int64)
+            df[TIMESTAMP] = pd.to_datetime(df[TIMESTAMP], errors="coerce").astype(np.int64)
 
             df[CALL_QUEUED_TIMESTAMP] = pd.to_numeric(df[CALL_QUEUED_TIMESTAMP], downcast='float')
             df[GOT_RESPONSE_TIMESTAMP] = pd.to_numeric(df[GOT_RESPONSE_TIMESTAMP], downcast='float')

@@ -30,7 +30,7 @@ class Data:
         df[GOT_RESPONSE_TIMESTAMP] = pd.to_datetime(df[GOT_RESPONSE_TIMESTAMP], unit='ns')
         
         # Convert timestamp column
-        df[TIMESTAMP] = pd.to_datetime(df[TIMESTAMP])
+        df['TIMESTAMP'] = pd.to_datetime(df['TIMESTAMP'], errors='coerce')
         
         # Add computed latency columns
         df['scheduling_latency_ms'] = (df[LEAF_SCHEDULED_CALL_TIMESTAMP] - df[LEAF_GOT_REQUEST_TIMESTAMP]).dt.total_seconds() * 1000
